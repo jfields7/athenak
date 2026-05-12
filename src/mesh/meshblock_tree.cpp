@@ -15,6 +15,7 @@
 #include "parameter_input.hpp"
 #include "mesh.hpp"
 #include "meshblock_tree.hpp"
+#include "hilbert_utils.hpp"
 
 // Define static member variables
 Mesh* MeshBlockTree::pmesh_;
@@ -348,6 +349,58 @@ void MeshBlockTree::CreateZOrderedLLList(LogicalLocation *list, int *pglist, int
   }
   return;
 }
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshBlockTree::CreateHilbertOrderedLLList(LogicalLocation *list,
+//!                         int *pg, int& cnt)
+//! \brief Creates the Location list for tree sorted by a Hilbert curve, and creates new
+//! MB ids based on this order.  Should be called from root of tree.
+template<int ndim>
+void MeshBlockTree::CreateHilbertOrderedLLList(LogicalLocation *list, int *pglist,
+                                               int& count) {
+  CreateHilbertOrderedLLList<ndim>(list, pglist, count, 0);
+}
+
+template<int ndim>
+void MeshBlockTree::CreateHilbertOrderedLLList(LogicalLocation *list, int *pglist,
+                                               int& count, int state) {
+  if (lloc_.level == 0) {count=0;}
+
+  if (pleaf_ == nullptr) {
+    list[count]=lloc_;
+    if (pglist != nullptr) {pglist[count]=gid_;}
+    gid_=count;
+    count++;
+  } else {
+    for (int n=0; n<nleaf_; n++) {
+      if constexpr (ndim == 2) {
+        int idx = hilbert::traversal_map_2d[state][n];
+        if (pleaf_[idx] != nullptr) {
+          pleaf_[idx]->CreateHilbertOrderedLLList<ndim>(list, pglist, count,
+                                                  hilbert::transition_map_2d[state][n]);
+        }
+      } else if (ndim == 3) {
+        int idx = hilbert::traversal_map_3d[state][n];
+        if (pleaf_[idx] != nullptr) {
+          pleaf_[idx]->CreateHilbertOrderedLLList<ndim>(list, pglist, count,
+                                                  hilbert::transition_map_3d[state][n]);
+        }
+      }
+    }
+  }
+  return;
+}
+
+// Template instantiations
+template void MeshBlockTree::CreateHilbertOrderedLLList<2>(LogicalLocation *list,
+    int *pglist, int& count);
+template void MeshBlockTree::CreateHilbertOrderedLLList<3>(LogicalLocation *list,
+    int *pglist, int& count);
+
+template void MeshBlockTree::CreateHilbertOrderedLLList<2>(LogicalLocation *list,
+    int *pglist, int& count, int state);
+template void MeshBlockTree::CreateHilbertOrderedLLList<3>(LogicalLocation *list,
+    int *pglist, int& count, int state);
 
 //----------------------------------------------------------------------------------------
 //! \fn MeshBlockTree* MeshBlockTree::FindNeighbor(LogicalLocation myloc,

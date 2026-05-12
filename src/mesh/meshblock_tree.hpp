@@ -47,6 +47,11 @@ class MeshBlockTree {
   MeshBlockTree* FindMeshBlock(LogicalLocation tloc);
   void CountMeshBlocks(int& count);
   void CreateZOrderedLLList(LogicalLocation *list, int *pglist, int& count);
+  template<int ndim>
+  void CreateHilbertOrderedLLList(LogicalLocation *list, int *pglist, int& count);
+  template<int ndim>
+  void CreateHilbertOrderedLLList(LogicalLocation *list, int *pglist, int& count,
+                                  int state);
   MeshBlockTree* FindNeighbor(LogicalLocation myloc, int ox1, int ox2, int ox3,
                               bool amrflag=false);
 

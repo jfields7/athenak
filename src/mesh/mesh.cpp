@@ -78,6 +78,9 @@ Mesh::Mesh(ParameterInput *pin) :
     one_d = true;
   }
 
+  // Determine if the mesh is sorted using a Hilbert curve or Z-ordering
+  use_hilbert = pin->GetOrAddBoolean("load_balancing", "use_hilbert", true);
+
   // Set BC flags for ix1/ox1 boundaries and error check
   mesh_bcs[BoundaryFace::inner_x1] = GetBoundaryFlag(pin->GetString("mesh", "ix1_bc"));
   mesh_bcs[BoundaryFace::outer_x1] = GetBoundaryFlag(pin->GetString("mesh", "ox1_bc"));

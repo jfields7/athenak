@@ -240,7 +240,8 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
   nmb_eachrank = new int[global_variable::nranks];
 
   // following returns LogicalLocation list sorted by Z-ordering, and total # of MBs
-  ptree->CreateZOrderedLLList(lloc_eachmb, nullptr, nmb_total);
+  //ptree->CreateZOrderedLLList(lloc_eachmb, nullptr, nmb_total);
+  CreateOrderedBlockList(lloc_eachmb, nullptr, nmb_total);
 
 #if MPI_PARALLEL_ENABLED
   // check there is at least one MeshBlock per MPI rank
@@ -445,7 +446,8 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // number read from the restart file.
   {
     int nnb;
-    ptree->CreateZOrderedLLList(lloc_eachmb, nullptr, nnb);
+    //ptree->CreateZOrderedLLList(lloc_eachmb, nullptr, nnb);
+    CreateOrderedBlockList(lloc_eachmb, nullptr, nnb);
     if (nnb != nmb_total) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "Tree reconstruction failed. Total number of blocks in "
@@ -507,4 +509,18 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // set remaining parameters, output diagnostics
   cfl_no = pin->GetReal("time", "cfl_number");
   if (global_variable::my_rank == 0) {PrintMeshDiagnostics();}
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void CreateOrderedBlockList
+//! Select the correct ordering function based on the dimensionality of the problem.
+
+void Mesh::CreateOrderedBlockList(LogicalLocation *list, int *pglist, int& count) {
+  if (one_d || !use_hilbert) {
+    ptree->CreateZOrderedLLList(list, pglist, count);
+  } else if (two_d) {
+    ptree->CreateHilbertOrderedLLList<2>(list, pglist, count);
+  } else if (three_d) {
+    ptree->CreateHilbertOrderedLLList<3>(list, pglist, count);
+  }
 }

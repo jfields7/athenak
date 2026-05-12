@@ -14,6 +14,7 @@
 #include <cstdint>  // int32_t
 #include <memory>
 #include <string>
+#include <functional>
 
 #include "athena.hpp"
 
@@ -114,6 +115,7 @@ class Mesh {
   bool multi_d;               // flag to indicate 2D and 3D calculations
   bool multilevel;            // true for SMR and AMR
   bool adaptive;              // true only for AMR
+  bool use_hilbert;           // sort mesh blocks with Hilbert (true) or z-order (false)
 
   int nmb_rootx1, nmb_rootx2, nmb_rootx3; // # of MeshBlocks at root level in each dir
   int nmb_total;           // total number of MeshBlocks across all levels/ranks
@@ -156,6 +158,8 @@ class Mesh {
   void AddCoordinatesAndPhysics(ParameterInput *pinput);
   BoundaryFlag GetBoundaryFlag(const std::string& input_string);
   std::string GetBoundaryString(BoundaryFlag input_flag);
+
+  void CreateOrderedBlockList(LogicalLocation *list, int *pglist, int& count);
 
   // comparison function for sorting LogicalLocations based on level
   static bool GreaterLevel(const LogicalLocation & left, const LogicalLocation &right) {

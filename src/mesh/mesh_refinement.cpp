@@ -398,7 +398,8 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   new_lloc_eachmb = new LogicalLocation[new_nmb];
   newtoold = new int[new_nmb];
   int new_nmb_total;
-  pm->ptree->CreateZOrderedLLList(new_lloc_eachmb, newtoold, new_nmb_total);
+  //pm->ptree->CreateZOrderedLLList(new_lloc_eachmb, newtoold, new_nmb_total);
+  pm->CreateOrderedBlockList(new_lloc_eachmb, newtoold, new_nmb_total);
   if (new_nmb_total != new_nmb) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
         << "Number of MeshBlocks in new tree = " << new_nmb_total << " but expected "
