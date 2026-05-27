@@ -214,6 +214,11 @@ class AthenaTensor<T, sym, ndim, 1> {
   decltype(auto) operator() (int const m, int const a,
                              int const k, int const j, int const i) const {
     //return data_(m,a,k,j,i);
+    #if defined(KOKKOS_ENABLE_DEBUG_BOUNDS_CHECK)
+    if (a >= ndim) {
+      Kokkos::abort("Requested variable is out of range for AthenaTensor.");
+    }
+    #endif
     return data_(m,low_+a,k,j,i);
   }
   //KOKKOS_INLINE_FUNCTION
@@ -251,7 +256,21 @@ class AthenaTensor<T, sym, ndim, 2> {
   decltype(auto) operator() (int const m, int const a, int const b,
                              int const k, int const j, int const i) const {
     //return data_(m,idxmap_[a][b],k,j,i);
-    return data_(m,low_+idxmap_[a][b],k,j,i);
+    #if defined(KOKKOS_ENABLE_DEBUG_BOUNDS_CHECK)
+    if (a >= ndim || b >= ndim) {
+      Kokkos::abort("Requested variable is out of range for AthenaTensor.");
+    }
+    #endif
+    //return data_(m,low_+idxmap_[a][b],k,j,i);
+    if constexpr (sym == TensorSymm::NONE) {
+      return data_(m,low_+(b+ndim*a),k,j,i);
+    } else if (sym == TensorSymm::SYM2 || sym == TensorSymm::ISYM2) {
+      if (b < a) {
+        return data_(m,low_+(b*(2*ndim - b + 1)/2+a-b),k,j,i);
+      } else {
+        return data_(m,low_+(a*(2*ndim - a + 1)/2+b-a),k,j,i);
+      }
+    }
   }
   //KOKKOS_INLINE_FUNCTION
   void InitWithShallowSlice(DvceArray5D<Real> src, const int indx1, const int indx2) {
