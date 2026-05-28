@@ -21,7 +21,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 153
+#define NOUTPUT_CHOICES 173
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -68,7 +68,7 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "adm_alpha", "adm_betax", "adm_betay", "adm_betaz",
   "adm",
 
-  // Z4c (106-128)
+  // Z4c (106-131)
   "z4c_chi",
   "z4c_gxx", "z4c_gxy", "z4c_gxz", "z4c_gyy", "z4c_gyz", "z4c_gzz",
   "z4c_Khat",
@@ -77,13 +77,14 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "z4c_Theta",
   "z4c_alpha",
   "z4c_betax", "z4c_betay", "z4c_betaz",
+  "z4c_Bx", "z4c_By", "z4c_Bz",
   "z4c",
 
-  // Weyl (129-131)
+  // Weyl (132-135)
   "weyl_rpsi4", "weyl_ipsi4",
   "weyl",
 
-  // ADM constraints (132-139)
+  // ADM constraints (136-142)
   "con_C",
   "con_H",
   "con_M",
@@ -91,14 +92,21 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "con_Mx", "con_My", "con_Mz",
   "con",
 
-  // Tmunu (140-150)
+  // Tmunu (143-153)
   "tmunu_Sxx", "tmunu_Sxy", "tmunu_Sxz", "tmunu_Syy", "tmunu_Syz", "tmunu_Szz",
   "tmunu_E",
   "tmunu_Sx", "tmunu_Sy", "tmunu_Sz",
   "tmunu",
 
-  // Particles (151-152)
-  "prtcl_all", "prtcl_d"
+  // Particles (154-155)
+  "prtcl_all", "prtcl_d",
+
+  // Z4c Diagnostics (156-172)
+  "z4c_Kretschmann",
+  "z4c_Exx", "z4c_Exy", "z4c_Exz", "z4c_Eyy", "z4c_Eyz", "z4c_Ezz",
+  "z4c_Bxx", "z4c_Bxy", "z4c_Bxz", "z4c_Byy", "z4c_Byz", "z4c_Bzz",
+  "z4c_Px", "z4c_Py", "z4c_Pz",
+  "z4c_diag"
 };
 
 
