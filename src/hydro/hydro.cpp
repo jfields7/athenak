@@ -34,6 +34,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     coarse_w0("cprim",1,1,1,1,1),
     u1("cons1",1,1,1,1,1),
     uflx("uflx",1,1,1,1,1),
+    wl_split("wl_split",1,1,1,1,1),
+    wr_split("wr_split",1,1,1,1,1),
     utest("utest",1,1,1,1,1),
     fofc("fofc",1,1,1,1) {
   // Total number of MeshBlocks on this rank to be used in array dimensioning
@@ -279,6 +281,23 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(uflx.x1f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(uflx.x2f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(uflx.x3f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+
+      // allocate global per-face L/R buffers for the split-kernel flux path.
+      // Sized to the maximum active face range across all three directions
+      // (face count = nx+1 along the direction's face-normal axis; cell counts
+      // along the transverse axes).  Only allocated if PLM + LLF/HLLC, since
+      // those are the only combinations that use the split path.
+      bool use_split_fluxes = (recon_method == ReconstructionMethod::plm) &&
+                              (rsolver_method == Hydro_RSolver::llf ||
+                               rsolver_method == Hydro_RSolver::hllc) &&
+                              (!use_fofc);
+      if (use_split_fluxes) {
+        int nf1 = indcs.nx1 + 1;
+        int nf2 = (indcs.nx2 > 1) ? (indcs.nx2 + 1) : 1;
+        int nf3 = (indcs.nx3 > 1) ? (indcs.nx3 + 1) : 1;
+        Kokkos::realloc(wl_split, nmb, (nhydro+nscalars), nf3, nf2, nf1);
+        Kokkos::realloc(wr_split, nmb, (nhydro+nscalars), nf3, nf2, nf1);
+      }
 
       // allocate array of flags used with FOFC
       if (use_fofc) {

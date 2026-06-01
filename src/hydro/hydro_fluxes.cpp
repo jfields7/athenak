@@ -15,12 +15,15 @@
 #include "eos/eos.hpp"
 #include "reconstruct/dc.hpp"
 #include "reconstruct/plm.hpp"
+#include "reconstruct/plm_split.hpp"
 #include "reconstruct/ppm.hpp"
 #include "reconstruct/wenoz.hpp"
 #include "hydro/rsolvers/advect_hyd.hpp"
 #include "hydro/rsolvers/llf_hyd.hpp"
+#include "hydro/rsolvers/llf_hyd_split.hpp"
 #include "hydro/rsolvers/hlle_hyd.hpp"
 #include "hydro/rsolvers/hllc_hyd.hpp"
+#include "hydro/rsolvers/hllc_hyd_split.hpp"
 #include "hydro/rsolvers/roe_hyd.hpp"
 #include "hydro/rsolvers/llf_srhyd.hpp"
 #include "hydro/rsolvers/hlle_srhyd.hpp"
@@ -55,6 +58,152 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   auto &size_ = pmy_pack->pmb->mb_size;
   auto &coord_ = pmy_pack->pcoord->coord_data;
   auto &w0_ = w0;
+
+  //--------------------------------------------------------------------------------------
+  // SPLIT-KERNEL PATH (PLM + LLF/HLLC).  Two RangePolicy kernels per direction:
+  // (1) per-cell PLM reconstruction writing wL/wR to global memory, then
+  // (2) per-face Riemann solve reading wL/wR and writing flx{1,2,3}.
+  // Skipped when FOFC is active (FOFC expands the loop ranges into ghosts in
+  // ways the current split-path index translation doesn't accommodate).
+  constexpr bool rsolver_split_ok = (rsolver_method_ == Hydro_RSolver::llf ||
+                                     rsolver_method_ == Hydro_RSolver::hllc);
+  if (rsolver_split_ok && recon_method_ == ReconstructionMethod::plm && !use_fofc) {
+    auto wl_ = wl_split;
+    auto wr_ = wr_split;
+    int nmb = nmb1 + 1;
+
+    //------------------------------------------------------------------------------------
+    // x1 direction
+    {
+      auto &flx1 = uflx.x1f;
+      // Reconstruction over cells [is-1, ie+1], all j in [js, je], all k in [ks, ke]
+      Kokkos::parallel_for("hflux_x1_recon_split",
+        Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks, js, is-1},
+                                               {nmb, ke+1, je+1, ie+2}),
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          PiecewiseLinearSplit<IVX>(m, k, j, i, is, js, ks, ie, je, ke,
+                                    nvars, w0_, wl_, wr_);
+        });
+
+      // Riemann solve over faces [is, ie+1]
+      Kokkos::parallel_for("hflux_x1_rsolve_split",
+        Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks, js, is},
+                                               {nmb, ke+1, je+1, ie+2}),
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          auto eos = eos_;
+          if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
+            SingleFaceLLF<IVX>(eos, m, k, j, i, is, js, ks, wl_, wr_, flx1);
+          } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
+            SingleFaceHLLC<IVX>(eos, m, k, j, i, is, js, ks, wl_, wr_, flx1);
+          }
+        });
+
+      // Scalar fluxes (upwind from sign of mass flux)
+      if (nvars > nhyd_) {
+        Kokkos::parallel_for("hflux_x1_scalars_split",
+          Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks, js, is},
+                                                 {nmb, ke+1, je+1, ie+2}),
+          KOKKOS_LAMBDA(int m, int k, int j, int i) {
+            const int kb = k - ks, jb = j - js, ib = i - is;
+            for (int n = nhyd_; n < nvars; ++n) {
+              if (flx1(m, IDN, k, j, i) >= 0.0) {
+                flx1(m, n, k, j, i) = flx1(m, IDN, k, j, i) * wl_(m, n, kb, jb, ib);
+              } else {
+                flx1(m, n, k, j, i) = flx1(m, IDN, k, j, i) * wr_(m, n, kb, jb, ib);
+              }
+            }
+          });
+      }
+    }
+
+    //------------------------------------------------------------------------------------
+    // x2 direction
+    if (pmy_pack->pmesh->multi_d) {
+      auto &flx2 = uflx.x2f;
+      // Reconstruction over cells j in [js-1, je+1], all i in [is, ie], all k in [ks, ke]
+      Kokkos::parallel_for("hflux_x2_recon_split",
+        Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks, js-1, is},
+                                               {nmb, ke+1, je+2, ie+1}),
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          PiecewiseLinearSplit<IVY>(m, k, j, i, is, js, ks, ie, je, ke,
+                                    nvars, w0_, wl_, wr_);
+        });
+
+      // Riemann solve over faces j in [js, je+1]
+      Kokkos::parallel_for("hflux_x2_rsolve_split",
+        Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks, js, is},
+                                               {nmb, ke+1, je+2, ie+1}),
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          auto eos = eos_;
+          if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
+            SingleFaceLLF<IVY>(eos, m, k, j, i, is, js, ks, wl_, wr_, flx2);
+          } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
+            SingleFaceHLLC<IVY>(eos, m, k, j, i, is, js, ks, wl_, wr_, flx2);
+          }
+        });
+
+      if (nvars > nhyd_) {
+        Kokkos::parallel_for("hflux_x2_scalars_split",
+          Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks, js, is},
+                                                 {nmb, ke+1, je+2, ie+1}),
+          KOKKOS_LAMBDA(int m, int k, int j, int i) {
+            const int kb = k - ks, jb = j - js, ib = i - is;
+            for (int n = nhyd_; n < nvars; ++n) {
+              if (flx2(m, IDN, k, j, i) >= 0.0) {
+                flx2(m, n, k, j, i) = flx2(m, IDN, k, j, i) * wl_(m, n, kb, jb, ib);
+              } else {
+                flx2(m, n, k, j, i) = flx2(m, IDN, k, j, i) * wr_(m, n, kb, jb, ib);
+              }
+            }
+          });
+      }
+    }
+
+    //------------------------------------------------------------------------------------
+    // x3 direction
+    if (pmy_pack->pmesh->three_d) {
+      auto &flx3 = uflx.x3f;
+      // Reconstruction over cells k in [ks-1, ke+1], all j in [js, je], all i in [is, ie]
+      Kokkos::parallel_for("hflux_x3_recon_split",
+        Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks-1, js, is},
+                                               {nmb, ke+2, je+1, ie+1}),
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          PiecewiseLinearSplit<IVZ>(m, k, j, i, is, js, ks, ie, je, ke,
+                                    nvars, w0_, wl_, wr_);
+        });
+
+      // Riemann solve over faces k in [ks, ke+1]
+      Kokkos::parallel_for("hflux_x3_rsolve_split",
+        Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks, js, is},
+                                               {nmb, ke+2, je+1, ie+1}),
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          auto eos = eos_;
+          if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
+            SingleFaceLLF<IVZ>(eos, m, k, j, i, is, js, ks, wl_, wr_, flx3);
+          } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
+            SingleFaceHLLC<IVZ>(eos, m, k, j, i, is, js, ks, wl_, wr_, flx3);
+          }
+        });
+
+      if (nvars > nhyd_) {
+        Kokkos::parallel_for("hflux_x3_scalars_split",
+          Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks, js, is},
+                                                 {nmb, ke+2, je+1, ie+1}),
+          KOKKOS_LAMBDA(int m, int k, int j, int i) {
+            const int kb = k - ks, jb = j - js, ib = i - is;
+            for (int n = nhyd_; n < nvars; ++n) {
+              if (flx3(m, IDN, k, j, i) >= 0.0) {
+                flx3(m, n, k, j, i) = flx3(m, IDN, k, j, i) * wl_(m, n, kb, jb, ib);
+              } else {
+                flx3(m, n, k, j, i) = flx3(m, IDN, k, j, i) * wr_(m, n, kb, jb, ib);
+              }
+            }
+          });
+      }
+    }
+
+    return;  // split-kernel path handled all directions
+  }
 
   //--------------------------------------------------------------------------------------
   // i-direction
