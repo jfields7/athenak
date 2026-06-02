@@ -24,7 +24,7 @@ namespace hydro {
 //! \fn void SingleStateLLF_HYD
 //  \brief The LLF Riemann solver for hydrodynamics for a single L/R state
 
-KOKKOS_INLINE_FUNCTION
+/*KOKKOS_INLINE_FUNCTION
 void SingleStateLLF_Hyd(const HydPrim1D &wl, const HydPrim1D &wr, const EOS_Data &eos,
                         HydCons1D &flux) {
   Real qa = wl.d*wl.vx;
@@ -73,6 +73,49 @@ void SingleStateLLF_Hyd(const HydPrim1D &wl, const HydPrim1D &wr, const EOS_Data
   flux.my = 0.5*(fsum.my - du.my);
   flux.mz = 0.5*(fsum.mz - du.mz);
   if (eos.is_ideal) {flux.e = 0.5*(fsum.e - du.e);}
+
+  return;
+}*/
+
+KOKKOS_INLINE_FUNCTION
+void SingleStateLLF_Hyd(const HydPrim1D &wl, const HydPrim1D &wr, const EOS_Data &eos,
+                        HydCons1D &flux) {
+  // Compute sum of L/R fluxes
+  Real a;
+  if (eos.is_ideal) {
+    // This is written in an ugly way in an attempt to minimize register usage.
+    Real esum;
+    {
+      Real pl = eos.IdealGasPressure(wl.e);
+      flux.mx = pl;
+      Real e = wl.e + 0.5*wl.d*(SQR(wl.vx) + SQR(wl.vy) + SQR(wl.vz));
+      esum = (e + pl)*wl.vx;
+      flux.e = -e;
+      a = fabs(wl.vx) + eos.IdealHydroSoundSpeed(wl.d, pl);
+    }
+
+    {
+      Real e = wr.e + 0.5*wr.d*(SQR(wr.vx) + SQR(wr.vy) + SQR(wr.vz));
+      flux.e += e;
+      Real pr = eos.IdealGasPressure(wr.e);
+      esum += (e + pr)*wr.vx;
+      flux.mx += pr;
+      a = fmax(a, fabs(wr.vx) + eos.IdealHydroSoundSpeed(wr.d, pr));
+    }
+
+    flux.e = 0.5*(esum - a*flux.e);
+  } else {
+    flux.mx = SQR(eos.iso_cs)*(wl.d + wr.d);
+    a = eos.iso_cs;
+  }
+
+  // Compute the LLF flux at the interface
+  Real qa = wl.d*wl.vx;
+  Real qb = wr.d*wr.vx;
+  flux.d = 0.5*((qa + qb) - a*(wr.d - wl.d));
+  flux.mx = 0.5*(((qa*wl.vx + qb*wr.vx) + flux.mx) - a*(qb - qa));
+  flux.my = 0.5*((qa*wl.vy + qb*wr.vy) - a*(wr.d*wr.vy - wl.d*wl.vy));
+  flux.mz = 0.5*((qa*wl.vz + qb*wr.vz) - a*(wr.d*wr.vz - wl.d*wl.vz));
 
   return;
 }
