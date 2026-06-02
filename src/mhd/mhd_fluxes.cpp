@@ -92,6 +92,17 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   int nmb1 = pmy_pack->nmb_thispack - 1;
   const auto recon_method_ = recon_method;
 
+  // Face-normal flux range. With FOFC enabled the first-order flux correction needs the
+  // main fluxes/EMFs one cell beyond the active domain, so each direction's face-normal
+  // range is extended by one cell on both sides (transverse ranges already cover the CT
+  // edge, so they are unchanged).
+  int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
+  if (use_fofc) {
+    il1 = is-1; iu1 = ie+2;
+    jl2 = js-1; ju2 = je+2;
+    kl3 = ks-1; ku3 = ke+2;
+  }
+
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
   auto &coord_ = pmy_pack->pcoord->coord_data;
@@ -115,9 +126,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     if (pmy_pack->pmesh->multi_d) { jl = js-1; ju = je+1; }
     if (pmy_pack->pmesh->three_d) { kl = ks-1; ku = ke+1; }
 
-    // Reconstruct W and Bcc over cells i in [is-1, ie+1]
+    // Reconstruct W and Bcc over cells i in [il1-1, iu1]
     par_for("mflux_x1_recon", DevExeSpace(),
-      0, nmb1, kl, ku, jl, ju, is-1, ie+1,
+      0, nmb1, kl, ku, jl, ju, il1-1, iu1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         ReconCell<IVX>(recon_method_, eos_, true,  m, k, j, i, is, js, ks, ie, je, ke,
                        nvars, w0_, wl_, wr_);
@@ -125,9 +136,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
                        3, bcc0_, bl_, br_);
       });
 
-    // Riemann solve over faces i in [is, ie+1]
+    // Riemann solve over faces i in [il1, iu1]
     par_for("mflux_x1_rsolve", DevExeSpace(),
-      0, nmb1, kl, ku, jl, ju, is, ie+1,
+      0, nmb1, kl, ku, jl, ju, il1, iu1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         auto eos = eos_;
         auto indcs = indcs_;
@@ -168,9 +179,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     int kl = ks, ku = ke;
     if (pmy_pack->pmesh->three_d) { kl = ks-1; ku = ke+1; }
 
-    // Reconstruct W and Bcc over cells j in [js-1, je+1], i in [is-1, ie+1]
+    // Reconstruct W and Bcc over cells j in [jl2-1, ju2], i in [is-1, ie+1]
     par_for("mflux_x2_recon", DevExeSpace(),
-      0, nmb1, kl, ku, js-1, je+1, is-1, ie+1,
+      0, nmb1, kl, ku, jl2-1, ju2, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         ReconCell<IVY>(recon_method_, eos_, true,  m, k, j, i, is, js, ks, ie, je, ke,
                        nvars, w0_, wl_, wr_);
@@ -178,9 +189,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
                        3, bcc0_, bl_, br_);
       });
 
-    // Riemann solve over faces j in [js, je+1], i in [is-1, ie+1]
+    // Riemann solve over faces j in [jl2, ju2], i in [is-1, ie+1]
     par_for("mflux_x2_rsolve", DevExeSpace(),
-      0, nmb1, kl, ku, js, je+1, is-1, ie+1,
+      0, nmb1, kl, ku, jl2, ju2, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         auto eos = eos_;
         auto indcs = indcs_;
@@ -217,9 +228,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     auto &e23 = e2x3;
     auto &e13 = e1x3;
 
-    // Reconstruct W and Bcc over cells k in [ks-1, ke+1], j in [js-1, je+1], i in [is-1, ie+1]
+    // Reconstruct W and Bcc over cells k in [kl3-1, ku3], j in [js-1, je+1], i in [is-1, ie+1]
     par_for("mflux_x3_recon", DevExeSpace(),
-      0, nmb1, ks-1, ke+1, js-1, je+1, is-1, ie+1,
+      0, nmb1, kl3-1, ku3, js-1, je+1, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         ReconCell<IVZ>(recon_method_, eos_, true,  m, k, j, i, is, js, ks, ie, je, ke,
                        nvars, w0_, wl_, wr_);
@@ -227,9 +238,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
                        3, bcc0_, bl_, br_);
       });
 
-    // Riemann solve over faces k in [ks, ke+1], j in [js-1, je+1], i in [is-1, ie+1]
+    // Riemann solve over faces k in [kl3, ku3], j in [js-1, je+1], i in [is-1, ie+1]
     par_for("mflux_x3_rsolve", DevExeSpace(),
-      0, nmb1, ks, ke+1, js-1, je+1, is-1, ie+1,
+      0, nmb1, kl3, ku3, js-1, je+1, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         auto eos = eos_;
         auto indcs = indcs_;

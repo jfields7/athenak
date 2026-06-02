@@ -139,16 +139,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // PPMX/WENOZ) and all Newtonian (Advect/LLF/HLLE/HLLC/Roe) and relativistic
     // (LLF/HLLE/HLLC SR; LLF/HLLE GR) Riemann solvers.
 
-    // FOFC is not yet ported to the split-kernel flux path (the first-order flux
-    // correction needs fluxes one layer beyond the active range, which the face-sized
-    // L/R buffers do not yet provide).
+    // FOFC: the split-kernel main flux kernels extend their face-normal range by one cell
+    // when FOFC is enabled, so the self-contained first-order flux correction
+    // (hydro_fofc.cpp) has the fluxes it needs over the [is-1,ie+2] etc. range.
     use_fofc = pin->GetOrAddBoolean("hydro","fofc",false);
-    if (use_fofc) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "FOFC is not yet supported on the split-recon-rsolver "
-                << "branch" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
 
     // select reconstruction method (default PLM)
     std::string xorder = pin->GetOrAddString("hydro","reconstruct","plm");
@@ -156,6 +150,14 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       recon_method = ReconstructionMethod::dc;
     } else if (xorder.compare("plm") == 0) {
       recon_method = ReconstructionMethod::plm;
+      // check that nghost > 2 with PLM+FOFC (FOFC extends recon by one cell)
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      if (use_fofc && indcs.ng < 3) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "FOFC and " << xorder << " reconstruction requires at "
+          << "least 3 ghost zones, but <mesh>/nghost=" << indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     } else if (xorder.compare("ppm4") == 0 ||
                xorder.compare("ppmx") == 0 ||
                xorder.compare("wenoz") == 0) {
@@ -165,6 +167,13 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << xorder << " reconstruction requires at least 3 ghost zones, "
           << "but <mesh>/nghost=" << indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      // check that nghost > 3 with PPM4(or PPMX or WENOZ)+FOFC
+      if (use_fofc && indcs.ng < 4) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "FOFC and " << xorder << " reconstruction requires at "
+          << "least 4 ghost zones, but <mesh>/nghost=" << indcs.ng << std::endl;
         std::exit(EXIT_FAILURE);
       }
       if (xorder.compare("ppm4") == 0) {

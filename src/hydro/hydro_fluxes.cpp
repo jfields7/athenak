@@ -86,6 +86,20 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   int nmb1 = pmy_pack->nmb_thispack - 1;
   const auto recon_method_ = recon_method;
 
+  // Face-normal and transverse flux ranges.  With FOFC the first-order flux correction
+  // reads the main fluxes one cell beyond the active domain in every dimension, so the
+  // reconstruction/solve ranges are extended by one cell on both sides when FOFC is on.
+  int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
+  int itl = is, itu = ie, jtl = js, jtu = je, ktl = ks, ktu = ke;
+  if (use_fofc) {
+    il1 = is-1; iu1 = ie+2;
+    jl2 = js-1; ju2 = je+2;
+    kl3 = ks-1; ku3 = ke+2;
+    itl = is-1; itu = ie+1;
+    if (pmy_pack->pmesh->multi_d) { jtl = js-1; jtu = je+1; }
+    if (pmy_pack->pmesh->three_d) { ktl = ks-1; ktu = ke+1; }
+  }
+
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
   auto &coord_ = pmy_pack->pcoord->coord_data;
@@ -97,17 +111,17 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   // x1 direction
   {
     auto &flx1 = uflx.x1f;
-    // Reconstruction over cells [is-1, ie+1], all j in [js, je], all k in [ks, ke]
+    // Reconstruction over cells i in [il1-1, iu1], j in [jtl, jtu], k in [ktl, ktu]
     par_for("hflux_x1_recon", DevExeSpace(),
-      0, nmb1, ks, ke, js, je, is-1, ie+1,
+      0, nmb1, ktl, ktu, jtl, jtu, il1-1, iu1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         ReconCell<IVX>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
                        nvars, w0_, wl_, wr_);
       });
 
-    // Riemann solve over faces [is, ie+1]
+    // Riemann solve over faces i in [il1, iu1]
     par_for("hflux_x1_rsolve", DevExeSpace(),
-      0, nmb1, ks, ke, js, je, is, ie+1,
+      0, nmb1, ktl, ktu, jtl, jtu, il1, iu1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         auto eos = eos_;
         auto indcs = indcs_;
@@ -141,17 +155,17 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   // x2 direction
   if (pmy_pack->pmesh->multi_d) {
     auto &flx2 = uflx.x2f;
-    // Reconstruction over cells j in [js-1, je+1], all i in [is, ie], all k in [ks, ke]
+    // Reconstruction over cells j in [jl2-1, ju2], i in [itl, itu], k in [ktl, ktu]
     par_for("hflux_x2_recon", DevExeSpace(),
-      0, nmb1, ks, ke, js-1, je+1, is, ie,
+      0, nmb1, ktl, ktu, jl2-1, ju2, itl, itu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         ReconCell<IVY>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
                        nvars, w0_, wl_, wr_);
       });
 
-    // Riemann solve over faces j in [js, je+1]
+    // Riemann solve over faces j in [jl2, ju2]
     par_for("hflux_x2_rsolve", DevExeSpace(),
-      0, nmb1, ks, ke, js, je+1, is, ie,
+      0, nmb1, ktl, ktu, jl2, ju2, itl, itu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         auto eos = eos_;
         auto indcs = indcs_;
@@ -184,17 +198,17 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   // x3 direction
   if (pmy_pack->pmesh->three_d) {
     auto &flx3 = uflx.x3f;
-    // Reconstruction over cells k in [ks-1, ke+1], all j in [js, je], all i in [is, ie]
+    // Reconstruction over cells k in [kl3-1, ku3], j in [jtl, jtu], i in [itl, itu]
     par_for("hflux_x3_recon", DevExeSpace(),
-      0, nmb1, ks-1, ke+1, js, je, is, ie,
+      0, nmb1, kl3-1, ku3, jtl, jtu, itl, itu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         ReconCell<IVZ>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
                        nvars, w0_, wl_, wr_);
       });
 
-    // Riemann solve over faces k in [ks, ke+1]
+    // Riemann solve over faces k in [kl3, ku3]
     par_for("hflux_x3_rsolve", DevExeSpace(),
-      0, nmb1, ks, ke+1, js, je, is, ie,
+      0, nmb1, kl3, ku3, jtl, jtu, itl, itu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         auto eos = eos_;
         auto indcs = indcs_;

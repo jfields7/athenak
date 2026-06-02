@@ -182,14 +182,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // for time-evolving problems, continue to construct methods, allocate arrays
   if (evolution_t.compare("stationary") != 0) {
-    // determine if FOFC is enabled
+    // determine if FOFC is enabled.  On the split-recon-rsolver branch the main flux
+    // kernels extend their face-normal range by one cell when FOFC is on, so the
+    // self-contained first-order flux correction (mhd_fofc.cpp) has the fluxes/EMFs it
+    // needs over [is-1,ie+2] etc.
     use_fofc = pin->GetOrAddBoolean("mhd","fofc",false);
-    if (use_fofc) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "FOFC is not yet supported on the split-recon-rsolver "
-                << "branch" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
 
     // select reconstruction method (default PLM)
     std::string xorder = pin->GetOrAddString("mhd","reconstruct","plm");
