@@ -48,6 +48,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     e3x2("e3x2",1,1,1,1),
     e2x3("e2x3",1,1,1,1),
     e1x3("e1x3",1,1,1,1),
+    wl_split("wl_split",1,1,1,1,1),
+    wr_split("wr_split",1,1,1,1,1),
+    bl_split("bl_split",1,1,1,1,1),
+    br_split("br_split",1,1,1,1,1),
     e1_cc("e1_cc",1,1,1,1),
     e2_cc("e2_cc",1,1,1,1),
     e3_cc("e3_cc",1,1,1,1),
@@ -180,6 +184,12 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   if (evolution_t.compare("stationary") != 0) {
     // determine if FOFC is enabled
     use_fofc = pin->GetOrAddBoolean("mhd","fofc",false);
+    if (use_fofc) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "FOFC is not yet supported on the split-recon-rsolver "
+                << "branch" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
 
     // select reconstruction method (default PLM)
     std::string xorder = pin->GetOrAddString("mhd","reconstruct","plm");
@@ -333,6 +343,15 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(e1_cc, nmb, ncells3, ncells2, ncells1);
       Kokkos::realloc(e2_cc, nmb, ncells3, ncells2, ncells1);
       Kokkos::realloc(e3_cc, nmb, ncells3, ncells2, ncells1);
+
+      // allocate global per-face L/R buffers for the split-kernel flux path.
+      // Indexed by the GLOBAL cell/face index (m,n,k,j,i), so sized to the full
+      // cell range (including ghost zones) in every dimension.  bl/br hold the
+      // reconstructed cell-centered magnetic field (3 components).
+      Kokkos::realloc(wl_split, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+      Kokkos::realloc(wr_split, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+      Kokkos::realloc(bl_split, nmb, 3, ncells3, ncells2, ncells1);
+      Kokkos::realloc(br_split, nmb, 3, ncells3, ncells2, ncells1);
 
       // allocate array of flags used with FOFC
       if (use_fofc) {
