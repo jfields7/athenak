@@ -99,6 +99,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     if (pmy_pack->pmesh->multi_d) { jtl = js-1; jtu = je+1; }
     if (pmy_pack->pmesh->three_d) { ktl = ks-1; ktu = ke+1; }
   }
+  int scr_level = 0;
 
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
@@ -111,13 +112,23 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   // x1 direction
   {
     auto &flx1 = uflx.x1f;
+    int tile_size = indcs_.nx1 + 2*indcs_.ng;
+    size_t scr_size_t = ScrArray2D<Real>::shmem_size(nvars, tile_size);
     // Reconstruction over cells i in [il1-1, iu1], j in [jtl, jtu], k in [ktl, ktu]
-    par_for("hflux_x1_recon", DevExeSpace(),
+    /*par_for("hflux_x1_recon", DevExeSpace(),
       0, nmb1, ktl, ktu, jtl, jtu, il1-1, iu1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         ReconCell<IVX>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
                        nvars, w0_, wl_, wr_);
-      });
+      });*/
+    par_for_outer("hflux_x1_recon", DevExeSpace(), scr_size_t, scr_level,
+                  0, nmb1, ktl, ktu, jtl, jtu,
+      KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
+        ReconCellTiled<IVX>(member, recon_method_, eos_, true, m, k, j, il1-1, iu1,
+                            tile_size, nvars, w0_, wl_, wr_);
+    });
+                  
+      
 
     // Riemann solve over faces i in [il1, iu1]
     par_for("hflux_x1_rsolve", DevExeSpace(),

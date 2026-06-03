@@ -113,4 +113,114 @@ void ReconCell(const ReconstructionMethod recon, const EOS_Data &eos,
   }
 }
 
+template <int ivx>
+KOKKOS_INLINE_FUNCTION
+void ReconCellTiled(TeamMember_t const &member, const ReconstructionMethod recon,
+               const EOS_Data &eos, const bool apply_floors,
+               const int m, const int k, const int j,
+               const int is, const int ie,
+               const int tile, const int nvars,
+               const DvceArray5D<Real> &q,
+               const DvceArray5D<Real> &wl,
+               const DvceArray5D<Real> &wr) {
+  // Compile-time stencil offsets along the reconstruction direction
+  constexpr int di = (ivx == IVX) ? 1 : 0;
+  constexpr int dj = (ivx == IVY) ? 1 : 0;
+  constexpr int dk = (ivx == IVZ) ? 1 : 0;
+
+  const Real dfloor = eos.dfloor;
+  const Real efloor = eos.is_ideal ? (eos.pfloor/(eos.gamma - 1.0)) : 0.0;
+
+  ScrArray2D<Real> qloc(member.team_scratch(0), nvars, tile);
+  // Copy the data from the global array into scratch.
+  int count = nvars*tile;
+  par_for_inner(member, 0, count-1, [&](const int idx) {
+    int i = idx % tile;
+    int n = (idx - i)/tile;
+    qloc(n,i) = q(m, n, k, j, i);
+  });
+  member.team_barrier();
+  //for (int n = 0; n < nvars; ++n) {
+    // ql is the right-face value of cell (writes the LEFT state of face i+1);
+    // qr is the left-face value of cell (writes the RIGHT state of face i).
+    int nx = ie - is + 1;
+    count = nx*nvars;
+    switch (recon) {
+      case ReconstructionMethod::dc:
+        par_for_inner(member, 0, count, [&](const int idx) {
+          int i = idx % nx;
+          int n = (idx - i)/nx;
+          i += is;
+          wl(m, n, k + dk, j + dj, i + di) = qloc(n, i);
+          wr(m, n, k, j, i) = qloc(n, i);
+        });
+        break;
+      case ReconstructionMethod::plm:
+        par_for_inner(member, 0, count, [&](const int idx) {
+          int i = idx % nx;
+          int n = (idx - i)/nx;
+          i += is;
+          Real ql_val, qr_val;
+          PLM(qloc(n, i-1),qloc(n, i),qloc(n, i+1),ql_val, qr_val);
+          wl(m, n, k + dk, j + dj, i + di) = ql_val;
+          wr(m, n, k, j, i) = qr_val;
+        });
+        break;
+      case ReconstructionMethod::ppm4:
+        par_for_inner(member, 0, count, [&](const int idx) {
+          int i = idx % nx;
+          int n = (idx - i)/nx;
+          i += is;
+          Real ql_val, qr_val;
+          PPM4(qloc(n, i-2), qloc(n, i-1), qloc(n, i), qloc(n, i+1), qloc(n, i+2), ql_val, qr_val);
+          wl(m, n, k + dk, j + dj, i + di) = ql_val;
+          wr(m, n, k, j, i) = qr_val;
+        });
+        break;
+      case ReconstructionMethod::ppmx:
+        par_for_inner(member, 0, count, [&](const int idx) {
+          int i = idx % nx;
+          int n = (idx - i)/nx;
+          i += is;
+          Real ql_val, qr_val;
+          PPMX(qloc(n, i-2), qloc(n, i-1), qloc(n, i), qloc(n, i+1), qloc(n, i+2), ql_val, qr_val);
+          if (apply_floors) {
+            if (n == IDN) { ql_val = fmax(ql_val, dfloor); qr_val = fmax(qr_val, dfloor); }
+            if (eos.is_ideal && n == IEN) {
+              ql_val = fmax(ql_val, efloor); qr_val = fmax(qr_val, efloor);
+            }
+          }
+          wl(m, n, k + dk, j + dj, i + di) = ql_val;
+          wr(m, n, k, j, i) = qr_val;
+        });
+        break;
+      case ReconstructionMethod::wenoz:
+        par_for_inner(member, 0, count, [&](const int idx) {
+          int i = idx % nx;
+          int n = (idx - i)/nx;
+          i += is;
+          Real ql_val, qr_val;
+          WENOZ(qloc(n, i-2), qloc(n, i-1), qloc(n, i), qloc(n, i+1), qloc(n, i+2), ql_val, qr_val);
+          if (apply_floors) {
+            if (n == IDN) { ql_val = fmax(ql_val, dfloor); qr_val = fmax(qr_val, dfloor); }
+            if (eos.is_ideal && n == IEN) {
+              ql_val = fmax(ql_val, efloor); qr_val = fmax(qr_val, efloor);
+            }
+          }
+          wl(m, n, k + dk, j + dj, i + di) = ql_val;
+          wr(m, n, k, j, i) = qr_val;
+        });
+        break;
+      default:
+        par_for_inner(member, 0, count, [&](const int idx) {
+          int i = idx % nx;
+          int n = (idx - i)/nx;
+          i += is;
+          wl(m, n, k + dk, j + dj, i + di) = qloc(n, i);
+          wr(m, n, k, j, i) = qloc(n, i);
+        });
+    }
+  //}
+}
+
 #endif  // RECONSTRUCT_RECON_HPP_
