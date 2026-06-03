@@ -118,10 +118,8 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     par_for("dyngrflux_x1_recon", DevExeSpace(),
       0, nmb1, kl, ku, jl, ju, il-1, iu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVX>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVX>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
+        ReconCell<IVX>(recon_method_, eos_, false, m, k, j, i, nvars, w0_, wl_, wr_);
+        ReconCell<IVX>(recon_method_, eos_, false, m, k, j, i, 3, bcc0_, bl_, br_);
       });
 
     // Riemann solve over faces i in [il, iu]
@@ -173,10 +171,8 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     par_for("dyngrflux_x2_recon", DevExeSpace(),
       0, nmb1, kl, ku, jl-1, ju, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVY>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVY>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
+        ReconCell<IVY>(recon_method_, eos_, false, m, k, j, i, nvars, w0_, wl_, wr_);
+        ReconCell<IVY>(recon_method_, eos_, false, m, k, j, i, 3, bcc0_, bl_, br_);
       });
 
     // Riemann solve over faces j in [jl, ju], i in [is-1, ie+1]
@@ -224,10 +220,8 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     par_for("dyngrflux_x3_recon", DevExeSpace(),
       0, nmb1, kl-1, ku, js-1, je+1, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVZ>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVZ>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
+        ReconCell<IVZ>(recon_method_, eos_, false, m, k, j, i, nvars, w0_, wl_, wr_);
+        ReconCell<IVZ>(recon_method_, eos_, false, m, k, j, i, 3, bcc0_, bl_, br_);
       });
 
     // Riemann solve over faces k in [kl, ku], j in [js-1, je+1], i in [is-1, ie+1]

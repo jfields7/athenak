@@ -38,8 +38,6 @@ KOKKOS_INLINE_FUNCTION
 void ReconCell(const ReconstructionMethod recon, const EOS_Data &eos,
                const bool apply_floors,
                const int m, const int k, const int j, const int i,
-               const int is, const int js, const int ks,
-               const int ie, const int je, const int ke,
                const int nvars,
                const DvceArray5D<Real> &q,
                const DvceArray5D<Real> &wl,

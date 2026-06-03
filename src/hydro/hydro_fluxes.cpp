@@ -115,8 +115,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     par_for("hflux_x1_recon", DevExeSpace(),
       0, nmb1, ktl, ktu, jtl, jtu, il1-1, iu1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVX>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
+        ReconCell<IVX>(recon_method_, eos_, true, m, k, j, i, nvars, w0_, wl_, wr_);
       });
 
     // Riemann solve over faces i in [il1, iu1]
@@ -159,8 +158,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     par_for("hflux_x2_recon", DevExeSpace(),
       0, nmb1, ktl, ktu, jl2-1, ju2, itl, itu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVY>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
+        ReconCell<IVY>(recon_method_, eos_, true, m, k, j, i, nvars, w0_, wl_, wr_);
       });
 
     // Riemann solve over faces j in [jl2, ju2]
@@ -202,8 +200,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     par_for("hflux_x3_recon", DevExeSpace(),
       0, nmb1, kl3-1, ku3, jtl, jtu, itl, itu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVZ>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
+        ReconCell<IVZ>(recon_method_, eos_, true, m, k, j, i, nvars, w0_, wl_, wr_);
       });
 
     // Riemann solve over faces k in [kl3, ku3]
