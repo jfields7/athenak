@@ -390,14 +390,14 @@ class PrimitiveSolverHydro {
                  &g3u[S11], &g3u[S12], &g3u[S13], &g3u[S22], &g3u[S23], &g3u[S33]);
 
       // Extract the conserved variables
-      Real cons_pt[NCONS], cons_pt_old[NCONS], prim_pt[NPRIM];
-      cons_pt[CDN] = cons_pt_old[CDN] = cons(m, IDN, k, j, i)*isdetg;
-      cons_pt[CSX] = cons_pt_old[CSX] = cons(m, IM1, k, j, i)*isdetg;
-      cons_pt[CSY] = cons_pt_old[CSY] = cons(m, IM2, k, j, i)*isdetg;
-      cons_pt[CSZ] = cons_pt_old[CSZ] = cons(m, IM3, k, j, i)*isdetg;
-      cons_pt[CTA] = cons_pt_old[CTA] = cons(m, IEN, k, j, i)*isdetg;
+      Real cons_pt[NCONS], prim_pt[NPRIM];
+      cons_pt[CDN] = cons(m, IDN, k, j, i)*isdetg;
+      cons_pt[CSX] = cons(m, IM1, k, j, i)*isdetg;
+      cons_pt[CSY] = cons(m, IM2, k, j, i)*isdetg;
+      cons_pt[CSZ] = cons(m, IM3, k, j, i)*isdetg;
+      cons_pt[CTA] = cons(m, IEN, k, j, i)*isdetg;
       for (int n = 0; n < nscal; n++) {
-        cons_pt[CYD + n] = cons_pt_old[CYD + n] = cons(m, nhyd + n, k, j, i)*isdetg;
+        cons_pt[CYD + n] = cons(m, nhyd + n, k, j, i)*isdetg;
       }
       // If we're only testing the floors, we can use the CC fields.
       Real b3u[NMAG];
@@ -448,6 +448,7 @@ class PrimitiveSolverHydro {
       if (result.error != Primitive::Error::SUCCESS && floors_only) {
         fofc_(m,k,j,i) = true;
       } else if (!floors_only) {
+        #ifdef KOKKOS_ENABLE_DEBUG
         if (result.error != Primitive::Error::SUCCESS && (nerrs_ + sumerrs < errcap_)) {
           sumerrs++;
           // Find out where the point went bad and report a bunch of information about it.
@@ -462,6 +463,10 @@ class PrimitiveSolverHydro {
           Real &x3min = size.d_view(m).x3min;
           Real &x3max = size.d_view(m).x3max;
           Real x3v = CellCenterX(k-ks, indcs.nx3, x3min, x3max);
+          Real DYe = 0.0;
+          if (nscal > 0) {
+            DYe = cons(m, nhyd, k, j, i)*isdetg;
+          }
 
           Kokkos::printf("An error occurred during the primitive solve: %s\n"
                  "  Location: (%d, %d, %d, %d)\n"
@@ -486,8 +491,9 @@ class PrimitiveSolverHydro {
                  ErrorToString(result.error),
                  m, k, j, i,
                  x1v, x2v, x3v,
-                 cons_pt_old[CDN], cons_pt_old[CSX], cons_pt_old[CSY], cons_pt_old[CSZ],
-                 cons_pt_old[CTA], cons_pt_old[CYD], b3u[IBX], b3u[IBY], b3u[IBZ], detg,
+                 cons(m, IDN, k, j, i)*isdetg, cons(m, IM1, k, j, i)*isdetg,
+                 cons(m, IM2, k, j, i)*isdetg, cons(m, IM3, k, j, i)*isdetg,
+                 cons(m, IEN, k, j, i)*isdetg, DYe, b3u[IBX], b3u[IBY], b3u[IBZ], detg,
                  g3d[S11], g3d[S12], g3d[S13], g3d[S22], g3d[S23], g3d[S33],
                  adm.alpha(m, k, j, i),
                  adm.beta_u(m, 0, k, j, i),
@@ -504,6 +510,7 @@ class PrimitiveSolverHydro {
                    nerrs_ + sumerrs,rank);
           }
         }
+        #endif // KOKKOS_ENABLE_DEBUG
         // Regardless of failure, we need to copy the primitives.
         prim(m, IDN, k, j, i) = prim_pt[PRH]*mb;
         prim(m, IVX, k, j, i) = prim_pt[PVX];
