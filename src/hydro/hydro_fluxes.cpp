@@ -69,6 +69,22 @@ void SolveFace(const EOS_Data &eos, const RegionIndcs &indcs,
   }
 }
 
+template<int ivx, class Recon>
+struct ReconFunctor {
+  const Recon& recon;
+  const EOS_Data& eos;
+  const bool apply_floors;
+  const int nvars;
+  const DvceArray5D<Real> q;
+  const DvceArray5D<Real> wl;
+  const DvceArray5D<Real> wr;
+
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const int m, const int k, const int j, const int i) const {
+    ReconCellTemplate<ivx>(recon, eos, true, m, k, j, i, nvars, q, wl, wr);
+  }
+};
+
 //----------------------------------------------------------------------------------------
 //! \fn void Hydro::CalculateFluxes
 //! \brief Calls reconstruction and Riemann solver functions to compute hydro fluxes.
@@ -112,11 +128,17 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   {
     auto &flx1 = uflx.x1f;
     // Reconstruction over cells i in [il1-1, iu1], j in [jtl, jtu], k in [ktl, ktu]
-    par_for("hflux_x1_recon", DevExeSpace(),
+    /*par_for("hflux_x1_recon", DevExeSpace(),
       0, nmb1, ktl, ktu, jtl, jtu, il1-1, iu1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         ReconCell<IVX>(recon_method_, eos_, true, m, k, j, i, nvars, w0_, wl_, wr_);
-      });
+      });*/
+    ReconDispatch(recon_method_, [&](auto recon) {
+      ReconFunctor<IVX,decltype(recon)> rf{recon, eos_, true, nvars, w0_, wl_, wr_};
+
+      par_for("hflux_x1_recon", DevExeSpace(),
+      0, nmb1, ktl, ktu, jtl, jtu, il1-1, iu1, rf);
+    });
 
     // Riemann solve over faces i in [il1, iu1]
     par_for("hflux_x1_rsolve", DevExeSpace(),

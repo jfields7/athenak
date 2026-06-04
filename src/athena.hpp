@@ -68,6 +68,13 @@ enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5
 // integer constants to specify spatial reconstruction methods
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};
 
+// Reconstruction policy tags for dispatching
+struct ReconDCTag {};
+struct ReconPLMTag {};
+struct ReconPPM4Tag {};
+struct ReconPPMXTag {};
+struct ReconWENOZTag {};
+
 // constants that enumerate time evolution options
 enum TimeEvolution {tstatic, kinematic, dynamic};
 
