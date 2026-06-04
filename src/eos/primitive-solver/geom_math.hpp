@@ -69,6 +69,16 @@ KOKKOS_INLINE_FUNCTION Real SquareVector(const Real vu[3], const Real g3d[NSPMET
         2.0*((g3d[S12]*vu[1] + g3d[S13]*vu[2])*vu[0] + g3d[S23]*vu[1]*vu[2]);
 }
 
+//! \brief Square a form
+//
+//  \param[in] vd  The input form
+//  \param[in] g3u The input inverse metric
+//  \return The square of v
+KOKKOS_INLINE_FUNCTION Real SquareForm(const Real vd[3], const Real g3u[NSPMETRIC]) {
+  return g3u[S11]*vd[0]*vd[0] + g3u[S22]*vd[1]*vd[1] + g3u[S33]*vd[2]*vd[2] +
+        2.0*((g3u[S12]*vd[1] + g3u[S13]*vd[2])*vd[0] + g3u[S23]*vd[1]*vd[2]);
+}
+
 //! \brief Invert a 3x3 matrix
 //
 //  \param[out] m_out The output matrix

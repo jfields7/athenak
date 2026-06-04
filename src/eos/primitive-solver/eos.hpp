@@ -627,8 +627,8 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   }
 
   //! \brief Respond to excess magnetization
-  KOKKOS_INLINE_FUNCTION Error DoMagnetizationResponse(Real& bsq, Real b_u[3]) const {
-    return MagnetizationResponse(bsq, b_u);
+  KOKKOS_INLINE_FUNCTION Error DoMagnetizationResponse(Real& bsq) const {
+    return MagnetizationResponse(bsq);
   }
 
   //! \brief Limit the density to a physical range

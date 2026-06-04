@@ -52,10 +52,10 @@ class Root {
     Real xold;
     x = lb;
     // If one of the bounds is already within tolerance of the root, we have the root.
-    if (fabs(flb)/lb <= tol) {
+    if (fabs(flb) <= tol*lb) {
       x = lb;
       return true;
-    } else if (fabs(fub)/ub <= tol) {
+    } else if (fabs(fub) <= tol*ub) {
       x = ub;
       return true;
     }
@@ -69,7 +69,7 @@ class Root {
       count++;
       // Calculate f at the prospective root.
       ftest = f(x,args...);
-      if (fabs((x-xold)/x) <= tol) {
+      if (fabs(x-xold) <= fabs(tol*x)) {
         return true;
       }
       // Check the sign of f. If f is on the same side as the lower bound, then we adjust
@@ -100,7 +100,7 @@ class Root {
     //last_count = count;
 
     // Return success if we're below the tolerance, otherwise report failure.
-    return fabs((x-xold)/x) <= tol;
+    return fabs(x-xold) <= fabs(tol*x);
   }
 
   // }}}
@@ -255,11 +255,11 @@ class Root {
         //f(fx, dfx, x, args...);
       }
       count++;
-    } while (fabs((xold-x)/x) > tol && count < iterations);
+    } while (fabs(xold-x) > fabs(tol*x) && count < iterations);
     //last_count = count;
 
     // Return success if we're below the tolerance, otherwise report failure.
-    return fabs((x-xold)/x) <= tol;
+    return fabs(x-xold) <= fabs(tol*x);
   }
   // }}}
 };

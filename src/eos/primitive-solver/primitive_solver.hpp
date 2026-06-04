@@ -372,7 +372,7 @@ SolverResult PrimitiveSolver<EOSPolicy, ErrorPolicy>::ConToPrim(Real prim[NPRIM]
   }
 
   // Calculate some utility quantities.
-  Real sqrtD = sqrt(D);
+  /*Real sqrtD = sqrt(D);
   Real b_u[3] = {B_u[0]/sqrtD, B_u[1]/sqrtD, B_u[2]/sqrtD};
   Real r_d[3] = {S_d[0]/D, S_d[1]/D, S_d[2]/D};
   Real r_u[3];
@@ -381,7 +381,12 @@ SolverResult PrimitiveSolver<EOSPolicy, ErrorPolicy>::ConToPrim(Real prim[NPRIM]
   Real rb     = Contract(b_u, r_d);
   Real rbsqr  = rb*rb;
   Real bsqr   = SquareVector(b_u, g3d);
-  Real q      = tau/D;
+  Real q      = tau/D;*/
+  Real rsqr  = SquareForm(S_d, g3u)/(D*D);
+  Real rbsqr = Contract(B_u, S_d);
+  rbsqr = rbsqr*rbsqr/(D*D*D);
+  Real bsqr  = SquareVector(B_u, g3d)/D;
+  Real q     = tau/D;
 
   // Make sure there are no NaNs at this point.
   if (!isfinite(D) || !isfinite(rsqr) || !isfinite(q) ||
@@ -400,7 +405,7 @@ SolverResult PrimitiveSolver<EOSPolicy, ErrorPolicy>::ConToPrim(Real prim[NPRIM]
   }
 
   // Make sure that the magnetic field is physical.
-  Error error = eos.DoMagnetizationResponse(bsqr, b_u);
+  Error error = eos.DoMagnetizationResponse(bsqr);
   if (error == Error::MAG_TOO_BIG) {
     HandleFailure(prim, cons, b, g3d);
     solver_result.error = Error::MAG_TOO_BIG;
@@ -410,13 +415,17 @@ SolverResult PrimitiveSolver<EOSPolicy, ErrorPolicy>::ConToPrim(Real prim[NPRIM]
     // If b_u is rescaled, we also need to adjust D, which means we'll
     // have to adjust all our other rescalings, too.
     Real Bsq = SquareVector(B_u, g3d);
+    Real factor = D*bsqr/Bsq;
     D = Bsq/bsqr;
-    r_d[0] = S_d[0]/D; r_d[1] = S_d[1]/D; r_d[2] = S_d[2]/D;
-    RaiseForm(r_u, r_d, g3d);
-    rb = Contract(b_u, r_d);
-    rbsqr = rb*rb;
-    q = tau/D;
-    rsqr = Contract(r_u, r_d);
+    //r_d[0] = S_d[0]/D; r_d[1] = S_d[1]/D; r_d[2] = S_d[2]/D;
+    //RaiseForm(r_u, r_d, g3d);
+    //rb = Contract(b_u, r_d);
+    //rbsqr = rb*rb;
+    //q = tau/D;
+    //rsqr = Contract(r_u, r_d);
+    rbsqr *= (factor*factor*factor);
+    rsqr *= (factor*factor);
+    q *= factor;
   }
 
   // If rsqr is identically zero, we can solve the problem analytically.
@@ -507,17 +516,19 @@ SolverResult PrimitiveSolver<EOSPolicy, ErrorPolicy>::ConToPrim(Real prim[NPRIM]
 
   // Retrieve the primitive variables.
   Real rho = n*eos.GetBaryonMass();
-  Real rbmu = rb*mu;
-  Real W = D/rho;
-  Real Wmux = W*mu/(1.0 + mu*bsqr);
+  //Real rbmu = rb*mu;
+  Real SBmu = Contract(S_d, B_u)*mu;
+  //Real W = D/rho;
+  //Real Wmux = W*mu/(1.0 + mu*bsqr);
+  Real Wmux = mu/(rho*D*(1.0 + mu*bsqr));
   // Before we retrieve the velocity, we need to raise S.
   Real S_u[3] = {0.0};
   RaiseForm(S_u, S_d, g3u);
   // Now we can get Wv.
   Real Wv_u[3] = {0.0};
-  Wv_u[0] = Wmux*(r_u[0] + rbmu*b_u[0]);
-  Wv_u[1] = Wmux*(r_u[1] + rbmu*b_u[1]);
-  Wv_u[2] = Wmux*(r_u[2] + rbmu*b_u[2]);
+  Wv_u[0] = Wmux*(D*S_u[0] + SBmu*B_u[0]);
+  Wv_u[1] = Wmux*(D*S_u[1] + SBmu*B_u[1]);
+  Wv_u[2] = Wmux*(D*S_u[2] + SBmu*B_u[2]);
 
   // Apply the flooring policy to the primitive variables.
   floored = eos.ApplyPrimitiveFloor(n, Wv_u, P, T, Y);

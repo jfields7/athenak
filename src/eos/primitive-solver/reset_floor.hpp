@@ -73,14 +73,9 @@ class ResetFloor : public ErrorPolicyInterface {
   }
 
   /// Response to excess magnetization
-  KOKKOS_INLINE_FUNCTION Error MagnetizationResponse(Real& bsq, Real b_u[3]) const {
+  KOKKOS_INLINE_FUNCTION Error MagnetizationResponse(Real& bsq) const {
     if (bsq > max_bsq) {
-      Real factor = sqrt(max_bsq/bsq);
       bsq = max_bsq;
-
-      b_u[0] /= factor;
-      b_u[1] /= factor;
-      b_u[2] /= factor;
 
       return Error::CONS_ADJUSTED;
     }
