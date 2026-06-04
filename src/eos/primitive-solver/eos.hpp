@@ -128,6 +128,26 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   static constexpr bool supports_potentials =
     std::is_base_of_v<SupportsChemicalPotentials, EOSPolicy>;
 
+  // Unit conversions
+  Real dens_code_to_eos;
+  Real dens_eos_to_code;
+
+  Real press_code_to_eos;
+  Real press_eos_to_code;
+
+  Real ener_eos_to_code;
+
+  Real temp_eos_to_code;
+  Real temp_code_to_eos;
+
+  Real ent_eos_to_code;
+
+  Real mass_eos_to_code;
+
+  Real vel_eos_to_code;
+
+  Real chem_pot_eos_to_code;
+
  public:
   //! \fn EOS()
   //  \brief Constructor for the EOS. It sets a default value for the floor.
@@ -140,7 +160,8 @@ class EOS : public EOSPolicy, public ErrorPolicy {
     T_atm = 1e-10;
     v_max = 1.0 - 1e-15;
     max_bsq = std::numeric_limits<Real>::max();
-    code_units = eos_units;
+    //code_units = eos_units;
+    SetCodeUnitSystem(eos_units);
     for (int i = 0; i < MAX_SPECIES; i++) {
       Y_atm[i] = 0.0;
     }
@@ -155,8 +176,9 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \param[in] Y  An array of particle fractions, expected to be of size n_species.
   //  \return The temperature according to the EOS.
   KOKKOS_INLINE_FUNCTION Real GetTemperatureFromE(Real n, Real e, Real *Y) const {
-    return TemperatureFromE(n, e*code_units.PressureConversion(eos_units), Y) *
-           eos_units.TemperatureConversion(code_units);
+    //return TemperatureFromE(n, e*code_units.PressureConversion(eos_units), Y) *
+    //       eos_units.TemperatureConversion(code_units);
+    return TemperatureFromE(n, e*press_code_to_eos, Y) * temp_eos_to_code;
   }
 
   //! \fn Real GetTemperatureFromP(Real n, Real p, Real *Y)
@@ -167,8 +189,9 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \param[in] Y  An array of particle fractions, expected to be of size n_species.
   //  \return The temperature according to the EOS.
   KOKKOS_INLINE_FUNCTION Real GetTemperatureFromP(Real n, Real p, Real *Y) const {
-    return TemperatureFromP(n, p*code_units.PressureConversion(eos_units), Y) *
-           eos_units.TemperatureConversion(code_units);
+    //return TemperatureFromP(n, p*code_units.PressureConversion(eos_units), Y) *
+    //       eos_units.TemperatureConversion(code_units);
+    return TemperatureFromP(n, p*press_code_to_eos, Y) * temp_eos_to_code;
   }
 
   //! \fn Real GetEnergy(Real n, Real T, Real *Y)
@@ -180,8 +203,9 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \param[in] Y  An array of size n_species of the particle fractions.
   //  \return The energy density according to the EOS.
   KOKKOS_INLINE_FUNCTION Real GetEnergy(Real n, Real T, const Real *Y) const {
-    return Energy(n, T*code_units.TemperatureConversion(eos_units), Y) *
-           eos_units.PressureConversion(code_units);
+    //return Energy(n, T*code_units.TemperatureConversion(eos_units), Y) *
+    //       eos_units.PressureConversion(code_units);
+    return Energy(n, T*temp_code_to_eos, Y) * press_eos_to_code;
   }
 
   //! \fn Real GetPressure(Real n, Real T, Real *Y)
@@ -193,8 +217,9 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \param[in] Y  An array of size n_species of the particle fractions.
   //  \return The pressure according to the EOS.
   KOKKOS_INLINE_FUNCTION Real GetPressure(Real n, Real T, Real *Y) const {
-    return Pressure(n, T*code_units.TemperatureConversion(eos_units), Y) *
-           eos_units.PressureConversion(code_units);
+    //return Pressure(n, T*code_units.TemperatureConversion(eos_units), Y) *
+    //       eos_units.PressureConversion(code_units);
+    return Pressure(n, T*temp_code_to_eos, Y) * press_eos_to_code;
   }
 
   //! \fn Real GetEntropy(Real n, Real T, Real *Y)
@@ -207,8 +232,10 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \return The entropy per baryon for this EOS.
   KOKKOS_INLINE_FUNCTION Real GetEntropy(Real n, Real T, Real *Y) const {
     if constexpr (supports_entropy) {
-      return EOSPolicy::Entropy(n, T*code_units.TemperatureConversion(eos_units), Y)/mb *
-             eos_units.EntropyConversion(code_units)/eos_units.MassConversion(code_units);
+      //return EOSPolicy::Entropy(n, T*code_units.TemperatureConversion(eos_units), Y)/mb *
+      //       eos_units.EntropyConversion(code_units)/eos_units.MassConversion(code_units);
+      return EOSPolicy::Entropy(n, T*temp_code_to_eos, Y)/(mb*mass_eos_to_code) *
+              ent_eos_to_code;
     } else {
       return std::numeric_limits<Real>::quiet_NaN();
     }
@@ -223,8 +250,9 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \param[in] Y  An array of size n_species of the particle fractions.
   //  \return The enthalpy per baryon for this EOS.
   KOKKOS_INLINE_FUNCTION Real GetEnthalpy(Real n, Real T, Real *Y) const {
-    return Enthalpy(n, T*code_units.TemperatureConversion(eos_units), Y)/mb *
-           (eos_units.EnergyConversion(code_units)/eos_units.MassConversion(code_units));
+    //return Enthalpy(n, T*code_units.TemperatureConversion(eos_units), Y)/mb *
+    //       (eos_units.EnergyConversion(code_units)/eos_units.MassConversion(code_units));
+    return Enthalpy(n, T*temp_code_to_eos, Y)/(mb * mass_eos_to_code) * ener_eos_to_code;
   }
 
   //! \fn Real GetMinimumEnthalpy()
@@ -232,8 +260,9 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //
   //  \return the minimum enthalpy per mass.
   KOKKOS_INLINE_FUNCTION Real GetMinimumEnthalpy() const {
-    return MinimumEnthalpy()/mb *
-           eos_units.EnergyConversion(code_units)/eos_units.MassConversion(code_units);
+    //return MinimumEnthalpy()/mb *
+    //       eos_units.EnergyConversion(code_units)/eos_units.MassConversion(code_units);
+    return MinimumEnthalpy()/(mb * mass_eos_to_code) * ener_eos_to_code;
   }
 
   //! \fn Real GetSoundSpeed(Real n, Real T, Real *Y)
@@ -245,8 +274,9 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \param[in] Y  An array of size n_species of the particle fractions.
   //  \return The sound speed for this EOS.
   KOKKOS_INLINE_FUNCTION Real GetSoundSpeed(Real n, Real T, Real *Y) const {
-    return SoundSpeed(n, T*code_units.TemperatureConversion(eos_units), Y) *
-           eos_units.VelocityConversion(code_units);
+    //return SoundSpeed(n, T*code_units.TemperatureConversion(eos_units), Y) *
+    //       eos_units.VelocityConversion(code_units);
+    return SoundSpeed(n, T*temp_code_to_eos, Y) * vel_eos_to_code;
   }
 
   //! \fn Real GetSpecificInternalEnergy(Real n, Real T, Real *Y)
@@ -258,8 +288,10 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \param[in] Y  An array of size n_species of the particle fractions.
   //  \return The specific energy for the EOS.
   KOKKOS_INLINE_FUNCTION Real GetSpecificInternalEnergy(Real n, Real T, Real *Y) const {
-    return SpecificInternalEnergy(n, T*code_units.TemperatureConversion(eos_units), Y) *
-           eos_units.EnergyConversion(code_units)/eos_units.MassConversion(code_units);
+    //return SpecificInternalEnergy(n, T*code_units.TemperatureConversion(eos_units), Y) *
+    //       eos_units.EnergyConversion(code_units)/eos_units.MassConversion(code_units);
+    return SpecificInternalEnergy(n, T*temp_code_to_eos, Y) *
+            (ener_eos_to_code/mass_eos_to_code);
   }
 
   //! \fn Real GetBaryonChemicalPotential(Real n, Real T, Real *Y)
@@ -272,9 +304,11 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \return The baryon chemical potential for the EOS.
   KOKKOS_INLINE_FUNCTION Real GetBaryonChemicalPotential(Real n, Real T, Real *Y) const {
     if constexpr (supports_potentials) {
+      //return EOSPolicy::BaryonChemicalPotential(n,
+      //         T*code_units->TemperatureConversion(*eos_units), Y) *
+      //       eos_units->ChemicalPotentialConversion(*code_units);
       return EOSPolicy::BaryonChemicalPotential(n,
-               T*code_units->TemperatureConversion(*eos_units), Y) *
-             eos_units->ChemicalPotentialConversion(*code_units);
+               T*temp_code_to_eos, Y) * chem_pot_eos_to_code;
     } else {
       return std::numeric_limits<Real>::quiet_NaN();
     }
@@ -290,9 +324,11 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \return The charge chemical potential for the EOS.
   KOKKOS_INLINE_FUNCTION Real GetChargeChemicalPotential(Real n, Real T, Real *Y) const {
     if constexpr (supports_potentials) {
+      //return EOSPolicy::ChargeChemicalPotential(n,
+      //         T*code_units->TemperatureConversion(*eos_units), Y) *
+      //       eos_units->ChemicalPotentialConversion(*code_units);
       return EOSPolicy::ChargeChemicalPotential(n,
-               T*code_units->TemperatureConversion(*eos_units), Y) *
-             eos_units->ChemicalPotentialConversion(*code_units);
+               T*temp_code_to_eos, Y) * chem_pot_eos_to_code;
     } else {
       return std::numeric_limits<Real>::quiet_NaN();
     }
@@ -309,9 +345,11 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   KOKKOS_INLINE_FUNCTION Real GetElectronLeptonChemicalPotential(Real n, Real T,
                                                                  Real *Y) const {
     if constexpr (supports_potentials) {
+      //return EOSPolicy::ElectronLeptonChemicalPotential(n,
+      //         T*code_units->TemperatureConversion(*eos_units), Y) *
+      //       eos_units->ChemicalPotentialConversion(*code_units);
       return EOSPolicy::ElectronLeptonChemicalPotential(n,
-               T*code_units->TemperatureConversion(*eos_units), Y) *
-             eos_units->ChemicalPotentialConversion(*code_units);
+               T*temp_code_to_eos, Y) * chem_pot_eos_to_code;
     } else {
       return std::numeric_limits<Real>::quiet_NaN();
     }
@@ -333,11 +371,15 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   KOKKOS_INLINE_FUNCTION bool GetBetaEquilibriumTrapped(Real n, Real e, Real *Yl,
                                 Real &T_eq, Real *Y_eq, Real T_guess, Real *Y_guess) {
     if constexpr (supports_potentials) {
+      //int ierr = EOSPolicy::BetaEquilibriumTrapped(n,
+      //             e*code_units->PressureConversion(*eos_units), Yl, T_eq, Y_eq,
+      //             T_guess*code_units->TemperatureConversion(*eos_units), Y_guess);
       int ierr = EOSPolicy::BetaEquilibriumTrapped(n,
-                   e*code_units->PressureConversion(*eos_units), Yl, T_eq, Y_eq,
-                   T_guess*code_units->TemperatureConversion(*eos_units), Y_guess);
+                   e*press_code_to_eos, Yl, T_eq, Y_eq,
+                   T_guess*temp_code_to_eos, Y_guess);
 
-      T_eq = T_eq*eos_units->TemperatureConversion(*code_units);
+      //T_eq = T_eq*eos_units->TemperatureConversion(*code_units);
+      T_eq = T_eq*temp_eos_to_code;
 
       return ierr==0;
     } else {
@@ -355,15 +397,16 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \param[inout] e_nu The total energy densities for each neutrino generation.
   inline void GetTrappedNeutrinos(Real n, Real T, Real *Y, Real n_nu[3], Real e_nu[3]) {
     if constexpr (supports_potentials) {
-      EOSPolicy::TrappedNeutrinos(n, T*code_units->TemperatureConversion(*eos_units), Y,
-                                  n_nu, e_nu);
+      //EOSPolicy::TrappedNeutrinos(n, T*code_units->TemperatureConversion(*eos_units), Y,
+      //                            n_nu, e_nu);
+      EOSPolicy::TrappedNeutrinos(n, T*temp_code_to_eos, Y, n_nu, e_nu);
 
-      Real n_units = eos_units->DensityConversion(*code_units);
-      Real e_units = eos_units->PressureConversion(*code_units);
+      //Real n_units = eos_units->DensityConversion(*code_units);
+      //Real e_units = eos_units->PressureConversion(*code_units);
 
       for (int i=0; i<3; ++i) {
-        n_nu[i] = n_nu[i]*n_units;
-        e_nu[i] = e_nu[i]*e_units;
+        n_nu[i] = n_nu[i]*dens_eos_to_code;
+        e_nu[i] = e_nu[i]*press_eos_to_code;
       }
     }
     return;
@@ -380,10 +423,10 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //                     at) (N.B. these are expected to be in code units).
   //  \param[inout] Yl   The total lepton fractions.
   inline void GetLeptonFractions(Real n, Real *Y, Real n_nu[6], Real *Yl) {
-    Real n_units = code_units->DensityConversion(*eos_units);
+    //Real n_units = code_units->DensityConversion(*eos_units);
 
     for (int i=0; i<3; ++i) {
-      Yl[i] = Y[i] + n_units*(n_nu[2*i] - n_nu[2*i+1])/n;
+      Yl[i] = Y[i] + dens_code_to_eos*(n_nu[2*i] - n_nu[2*i+1])/n;
     }
 
     return;
@@ -399,8 +442,9 @@ class EOS : public EOSPolicy, public ErrorPolicy {
   //  \brief Get the baryon mass used by this EOS. Note that
   //         this factor also converts the density.
   KOKKOS_INLINE_FUNCTION Real GetBaryonMass() const {
-    return mb*eos_units.MassConversion(code_units) *
-              eos_units.DensityConversion(code_units);
+    //return mb*eos_units.MassConversion(code_units) *
+    //          eos_units.DensityConversion(code_units);
+    return mb*mass_eos_to_code*dens_eos_to_code;
   }
 
   //! \fn bool ApplyPrimitiveFloor(Real& n, Real& vu[3], Real& p, Real& T)
@@ -594,9 +638,11 @@ class EOS : public EOSPolicy, public ErrorPolicy {
 
   //! \brief Limit the temperature to a physical range
   KOKKOS_INLINE_FUNCTION void ApplyTemperatureLimits(Real& T) const {
-    Real T_eos = T*code_units.TemperatureConversion(eos_units);
+    //Real T_eos = T*code_units.TemperatureConversion(eos_units);
+    Real T_eos = T*temp_code_to_eos;
     TemperatureLimits(T_eos, min_T, max_T);
-    T = T_eos*eos_units.TemperatureConversion(code_units);
+    //T = T_eos*eos_units.TemperatureConversion(code_units);
+    T = T_eos*temp_eos_to_code;
   }
 
   //! \brief Limit Y to a specified range
@@ -606,17 +652,21 @@ class EOS : public EOSPolicy, public ErrorPolicy {
 
   //! \brief Limit the pressure to a specified range at a given density and composition
   KOKKOS_INLINE_FUNCTION void ApplyPressureLimits(Real& P, Real n, Real* Y) const {
-    Real P_eos = P*code_units.PressureConversion(eos_units);
+    //Real P_eos = P*code_units.PressureConversion(eos_units);
+    Real P_eos = P*press_code_to_eos;
     PressureLimits(P_eos, MinimumPressure(n, Y), MaximumPressure(n, Y));
-    P = P_eos*eos_units.PressureConversion(code_units);
+    //P = P_eos*eos_units.PressureConversion(code_units);
+    P = P_eos*press_eos_to_code;
   }
 
   //! \brief Limit the energy density to a specified range at a given density and
   //  composition
   KOKKOS_INLINE_FUNCTION void ApplyEnergyLimits(Real& e, Real n, Real* Y) const {
-    Real e_eos = e*code_units.PressureConversion(eos_units);
+    //Real e_eos = e*code_units.PressureConversion(eos_units);
+    Real e_eos = e*press_code_to_eos;
     EnergyLimits(e_eos, MinimumEnergy(n, Y), MaximumEnergy(n, Y));
-    e = e_eos*eos_units.PressureConversion(code_units);
+    //e = e_eos*eos_units.PressureConversion(code_units);
+    e = e_eos*press_eos_to_code;
   }
 
   //! \brief Respond to a failed solve.
@@ -631,11 +681,32 @@ class EOS : public EOSPolicy, public ErrorPolicy {
 
   KOKKOS_INLINE_FUNCTION void SetCodeUnitSystem(UnitSystem units) {
     code_units = units;
+
+    // Update unit conversions
+    dens_code_to_eos = code_units.DensityConversion(eos_units);
+    dens_eos_to_code = eos_units.DensityConversion(code_units);
+
+    press_code_to_eos = code_units.PressureConversion(eos_units);
+    press_eos_to_code = eos_units.PressureConversion(code_units);
+
+    ener_eos_to_code = eos_units.EnergyConversion(code_units);
+
+    temp_code_to_eos = code_units.TemperatureConversion(eos_units);
+    temp_eos_to_code = eos_units.TemperatureConversion(code_units);
+
+    ent_eos_to_code = eos_units.EntropyConversion(code_units);
+
+    mass_eos_to_code = eos_units.MassConversion(code_units);
+
+    vel_eos_to_code = eos_units.VelocityConversion(code_units);
+
+    chem_pot_eos_to_code = eos_units.ChemicalPotentialConversion(code_units);
   }
 
   KOKKOS_INLINE_FUNCTION UnitSystem& GetCodeUnitSystem() const {
     return code_units;
   }
+
 
   KOKKOS_INLINE_FUNCTION UnitSystem& GetEOSUnitSystem() const {
     return eos_units;
