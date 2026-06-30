@@ -24,59 +24,6 @@ namespace hydro {
 //! \fn void SingleStateLLF_HYD
 //  \brief The LLF Riemann solver for hydrodynamics for a single L/R state
 
-/*KOKKOS_INLINE_FUNCTION
-void SingleStateLLF_Hyd(const HydPrim1D &wl, const HydPrim1D &wr, const EOS_Data &eos,
-                        HydCons1D &flux) {
-  Real qa = wl.d*wl.vx;
-  Real qb = wr.d*wr.vx;
-
-  // Compute sum of L/R fluxes
-  HydCons1D fsum;
-  fsum.d  = qa        + qb;
-  fsum.mx = qa*wl.vx + qb*wr.vx;
-  fsum.my = qa*wl.vy + qb*wr.vy;
-  fsum.mz = qa*wl.vz + qb*wr.vz;
-
-  Real el,er,pl,pr;
-  if (eos.is_ideal) {
-    pl = eos.IdealGasPressure(wl.e);
-    pr = eos.IdealGasPressure(wr.e);
-    el = wl.e + 0.5*wl.d*(SQR(wl.vx) + SQR(wl.vy) + SQR(wl.vz));
-    er = wr.e + 0.5*wr.d*(SQR(wr.vx) + SQR(wr.vy) + SQR(wr.vz));
-    fsum.mx += (pl + pr);
-    fsum.e  = (el + pl)*wl.vx + (er + pr)*wr.vx;
-  } else {
-    fsum.mx += SQR(eos.iso_cs)*(wl.d + wr.d);
-  }
-
-  // Compute max wave speed in L,R states (see Toro eq. 10.43)
-  if (eos.is_ideal) {
-    qa = eos.IdealHydroSoundSpeed(wl.d, pl);
-    qb = eos.IdealHydroSoundSpeed(wr.d, pr);
-  } else {
-    qa = eos.iso_cs;
-    qb = eos.iso_cs;
-  }
-  Real a = fmax( (fabs(wl.vx) + qa), (fabs(wr.vx) + qb) );
-
-  // Compute difference in L/R states dU, multiplied by max wave speed
-  HydCons1D du;
-  du.d  = a*(wr.d       - wl.d);
-  du.mx = a*(wr.d*wr.vx - wl.d*wl.vx);
-  du.my = a*(wr.d*wr.vy - wl.d*wl.vy);
-  du.mz = a*(wr.d*wr.vz - wl.d*wl.vz);
-  if (eos.is_ideal) du.e = a*(er - el);
-
-  // Compute the LLF flux at interface (see Toro eq. 10.42).
-  flux.d  = 0.5*(fsum.d  - du.d );
-  flux.mx = 0.5*(fsum.mx - du.mx);
-  flux.my = 0.5*(fsum.my - du.my);
-  flux.mz = 0.5*(fsum.mz - du.mz);
-  if (eos.is_ideal) {flux.e = 0.5*(fsum.e - du.e);}
-
-  return;
-}*/
-
 KOKKOS_INLINE_FUNCTION
 void SingleStateLLF_Hyd(const HydPrim1D &wl, const HydPrim1D &wr, const EOS_Data &eos,
                         HydCons1D &flux) {
