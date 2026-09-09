@@ -154,6 +154,12 @@ DynGRMHD::DynGRMHD(MeshBlockPack *pp, ParameterInput *pin) :
   dmp_M = pin->GetOrAddReal("mhd", "dmp_M", 1.2);
   scalar_pplimiter = pin->GetOrAddBoolean("mhd", "scalar_pplimiter", true);
 
+  well_balanced = pin->GetOrAddBoolean("mhd", "well_balanced", false);
+  if (rsolver_method != DynGRMHD_RSolver::hlld_dyngr) {
+    std::cout << "### WARNING in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Well balancing enabled without HLLD!" << std::endl;
+  }
+
   fixed_evolution = pin->GetOrAddBoolean("mhd", "fixed", false);
 
   // allocate memory for temperature
@@ -550,6 +556,7 @@ void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS(const DvceArray5D<Real
   // excision mask, and target values
   bool smoothing = pmy_pack->pcoord->coord_data.smooth_excision;
   auto &floor = pmy_pack->pcoord->excision_floor;
+  bool &well_balanced_ = well_balanced;
   Real &dexcise = pmy_pack->pcoord->coord_data.dexcise;
   // Real &pexcise = pmy_pack->pcoord->coord_data.pexcise;
   Real &texcise = pmy_pack->pcoord->coord_data.texcise;
@@ -592,20 +599,38 @@ void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS(const DvceArray5D<Real
     // Calculate the metric derivatives
     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
     Real dalpha_d[3] = {0.};
-    for (int a = 0; a < ndim; a++) {
-      dalpha_d[a] = Dx<NGHOST>(a, idx, adm.alpha, m, k, j, i);
-    }
     Real dbeta_du[3][3] = {};
-    for (int a = 0; a < 3; a++) {
-      for (int b = 0; b < ndim; b++) {
-        dbeta_du[b][a] = Dx<NGHOST>(b, idx, adm.beta_u, m, a, k, j, i);
-      }
-    }
     Real dg_ddd[3][3][3] = {};
-    for (int a = 0; a < 3; ++a) {
-      for (int b = 0; b < 3; ++b) {
-        for (int c = 0; c < ndim; ++c) {
-          dg_ddd[c][a][b] = Dx<NGHOST>(c, idx, adm.g_dd, m, a, b, k, j, i);
+    if (!well_balanced_) {
+      for (int a = 0; a < ndim; a++) {
+        dalpha_d[a] = Dx<NGHOST>(a, idx, adm.alpha, m, k, j, i);
+      }
+      for (int a = 0; a < 3; a++) {
+        for (int b = 0; b < ndim; b++) {
+          dbeta_du[b][a] = Dx<NGHOST>(b, idx, adm.beta_u, m, a, k, j, i);
+        }
+      }
+      for (int a = 0; a < 3; ++a) {
+        for (int b = 0; b < 3; ++b) {
+          for (int c = 0; c < ndim; ++c) {
+            dg_ddd[c][a][b] = Dx<NGHOST>(c, idx, adm.g_dd, m, a, b, k, j, i);
+          }
+        }
+      }
+    } else {
+       for (int a = 0; a < ndim; a++) {
+        dalpha_d[a] = Dxvol<NGHOST>(a, idx, adm.alpha, m, k, j, i);
+      }
+      for (int a = 0; a < 3; a++) {
+        for (int b = 0; b < ndim; b++) {
+          dbeta_du[b][a] = Dxvol<NGHOST>(b, idx, adm.beta_u, m, a, k, j, i);
+        }
+      }
+      for (int a = 0; a < 3; ++a) {
+        for (int b = 0; b < 3; ++b) {
+          for (int c = 0; c < ndim; ++c) {
+            dg_ddd[c][a][b] = Dxvol<NGHOST>(c, idx, adm.g_dd, m, a, b, k, j, i);
+          }
         }
       }
     }

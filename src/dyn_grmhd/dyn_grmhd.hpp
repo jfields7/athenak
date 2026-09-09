@@ -119,6 +119,7 @@ class DynGRMHD {
   Real dmp_M;               // threshold multiplier for discrete maximum principle.
   bool fixed_evolution;     // Disable mhd evolution
   bool scalar_pplimiter;    // Apply positivity preserving limiter on scalar
+  bool well_balanced;       // Enable hydrostatic well balancing
 
   bool monitor_failures;
 };
