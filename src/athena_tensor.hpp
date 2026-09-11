@@ -391,7 +391,6 @@ constexpr int TensorDOF<TensorSymm::SYM22, ndim, 4> = ndim*ndim*(ndim+1)*(ndim+1
 template<typename T, TensorSymm sym, int ndim>
 class AthenaPointTensor<T, sym, ndim, 2> {
  public:
-  KOKKOS_INLINE_FUNCTION
   AthenaPointTensor() = default;
   // the default destructor/copy operators are sufficient
   ~AthenaPointTensor() = default;
@@ -451,7 +450,6 @@ class AthenaPointTensor<T, sym, ndim, 2> {
 template<typename T, TensorSymm sym, int ndim>
 class AthenaPointTensor<T, sym, ndim, 3> {
  public:
-  KOKKOS_INLINE_FUNCTION
   AthenaPointTensor() = default;
   // the default destructor/copy operators are sufficient
   ~AthenaPointTensor() = default;
