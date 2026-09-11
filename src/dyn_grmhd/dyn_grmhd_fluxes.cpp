@@ -22,6 +22,7 @@
 #include "coordinates/adm.hpp"
 #include "dyn_grmhd.hpp"
 #include "dyn_grmhd_util.hpp"
+#include "dyn_grmhd_wb.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
 #include "reconstruct/recon.hpp"
@@ -94,7 +95,9 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
   auto &eos_   = pmy_pack->pmhd->peos->eos_data;   // EOS_Data (recon floors; unused here)
   auto &dyn_eos_ = eos;                            // PrimitiveSolverHydro
   auto &adm_   = pmy_pack->padm->adm;
+  auto &temperature_ = temperature;
   bool use_fofc = pmy_pack->pmhd->use_fofc;
+  bool &well_balanced_ = well_balanced;
 
   auto wl_ = pmy_pack->pmhd->wl3d;
   auto wr_ = pmy_pack->pmhd->wr3d;
@@ -138,6 +141,12 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     // Reconstruct Bcc over cells i in [il-1, iu], components n in [0, 2]
     ReconDispatch<IVX>(recon_method_, "dyngrflux_x1_recon_b", nmb1,
         kl, ku, jl, ju, il-1, iu, eos_, false, 3,     bcc0_, bl_, br_);
+    // Perform piecewise-equilibrium reconstruction of P if well balancing is enabled.
+    if (well_balanced_) {
+      WellBalancedDispatch<IVX>(recon_method_, "dyngrflux_x1_wb", nmb1,
+          kl, ku, jl, ju, il-1, iu, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+          nvars - nhyd);
+    }
 
     // Riemann solve over faces i in [il, iu]
     par_for("dyngrflux_x1_rsolve", DevExeSpace(),
