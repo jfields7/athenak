@@ -248,6 +248,11 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
   }
   // We'll need this later on to undensitize stuff
   Real volp12 = ip12.ComputeSpacetimeVolume();
+  if (volp12 < Kokkos::Experimental::epsilon_v<Real>) {
+    // Abort the equilibrium calculation if the spacetime volume is too small; we're
+    // at a singularity.
+    return;
+  }
 
   // RIGHT INTERFACE
   WBStateInterface im12{InterfacePolicy<ivx, 2, -1>(), adm, csi, csi.Phat, m, k, j, i};
@@ -257,6 +262,11 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
   }
   // We'll need this later on to undensitize stuff
   Real volm12 = im12.ComputeSpacetimeVolume();
+  if (volm12 < Kokkos::Experimental::epsilon_v<Real>) {
+    // Abort the equilibrium calculation if the spacetime volume is too small; we're
+    // at a singularity.
+    return;
+  }
 
   constexpr int di = (ivx == IVX);
   constexpr int dj = (ivx == IVY);
