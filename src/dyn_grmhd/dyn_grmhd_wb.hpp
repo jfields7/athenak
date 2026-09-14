@@ -44,6 +44,7 @@ decltype(auto) InterpToInterface(const Arr& q,
 // An interpolation operator to compute the interface i+3/2. This is for working with the
 // local approximation
 template<int ivx, int nghosts, int sign, class Arr, class... Idxs>
+KOKKOS_INLINE_FUNCTION
 decltype(auto) InterpToNextInterface(const Arr& q,
                                  const int k, const int j, const int i, Idxs... idxs) {
   constexpr int shifti = sign*(ivx == IVX);
@@ -62,12 +63,12 @@ decltype(auto) InterpToNextInterface(const Arr& q,
             Real(5./16.)*q(idxs..., k+2*shiftk, j+2*shiftj, i+2*shifti));
   } else if constexpr (nghosts == 4) {
     // In the 6th-order case, we interpolate a quintic polynomial centered on i+1/2.
-    return (Real(7./256.)*q(idxs..., k-2*shiftk, j-2*shiftj, i-2*shifti) -
-            Real(45./256.)*q(idxs..., k-shiftk, j-shiftj, i-shifti)) +
-           (Real(126./256.)*q(idxs..., k, j, i) +
-            Real(63./256.)*q(idxs..., k+3*shiftk, j+3*shiftj, i+3*shifti)) +
-           (-Real(210./256.)*q(idxs..., k+shiftk, j+shiftj, i+shifti) +
-             Real(315./256.)*q(idxs..., k+2*shiftk, j+2*shiftj, i+2*shifti));
+    return (Real(3./256.)*q(idxs..., k-2*shiftk, j-2*shiftj, i-2*shifti) -
+            Real(21./256.)*q(idxs..., k-shiftk, j-shiftj, i-shifti)) +
+           (-Real(70./256.)*q(idxs..., k, j, i) -
+            Real(7./256.)*q(idxs..., k+3*shiftk, j+3*shiftj, i+3*shifti)) +
+           (Real(210./256.)*q(idxs..., k+shiftk, j+shiftj, i+shifti) +
+             Real(105./256.)*q(idxs..., k+2*shiftk, j+2*shiftj, i+2*shifti));
   } else {
     static_assert(!sizeof(Arr*),
                   "Unsupported nghosts required for InterpToNextInterface.");
@@ -214,7 +215,7 @@ struct WBStateInterface {
                           k+dk, j+dj, i+di, m, b, a);
         }
       }
-    }
+    } 
     Peqhat = IntegrateEquilibrium(Phateq, state.Phat, state.etild,
                                   state.alp, alp, state.gdd, gdd, state.guu);
   }
