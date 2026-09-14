@@ -34,18 +34,9 @@ bool CheckBalance(MeshBlockPack* pmbp, Real e0, Real tol) {
   auto& adm_ = pmbp->padm->adm;
   auto &size = pmbp->pmb->mb_size;
   auto &indcs = pmbp->pmesh->mb_indcs;
-  int &ng = indcs.ng;
-  int n1 = indcs.nx1 + 2*ng;
-  int n2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*ng) : 1;
-  int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*ng) : 1;
   int &is = indcs.is;
   int &js = indcs.js;
   int &ks = indcs.ks;
-  int &ie = indcs.ie;
-  int &je = indcs.je;
-  int &ke = indcs.ke;
-  int nmb1 = pmbp->nmb_thispack - 1;
-
 
   bool global_success = true;
   int nx1 = indcs.nx1;
@@ -143,11 +134,6 @@ void ProblemGenerator::WellBalancing(ParameterInput *pin, const bool restart) {
   int n2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*ng) : 1;
   int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*ng) : 1;
   int &is = indcs.is;
-  int &js = indcs.js;
-  int &ks = indcs.ks;
-  int &ie = indcs.ie;
-  int &je = indcs.je;
-  int &ke = indcs.ke;
   int nmb1 = pmbp->nmb_thispack - 1;
   Real gm1 = pmbp->pmhd->peos->eos_data.gamma - 1.0;
 
