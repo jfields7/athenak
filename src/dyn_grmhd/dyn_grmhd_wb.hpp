@@ -192,7 +192,7 @@ struct WBStateInterface {
   KOKKOS_INLINE_FUNCTION
   WBStateInterface(InterfacePolicy<ivx, nghosts, shift> policy,
                    const adm::ADM::ADM_vars& adm, const WBStateCenter& state,
-                   const Real& Phateq, const int m, const int k, const int j,
+                   const Real& Phateq_, const int m, const int k, const int j,
                    const int i) {
     constexpr int sign = (shift > 0) ? 1 : -1;
     if constexpr (shift == 1 || shift == -1) {
@@ -216,7 +216,7 @@ struct WBStateInterface {
         }
       }
     } 
-    Peqhat = IntegrateEquilibrium(Phateq, state.Phat, state.etild,
+    Peqhat = IntegrateEquilibrium(Phateq_, state.Phat, state.etild,
                                   state.alp, alp, state.gdd, gdd, state.guu);
   }
 
