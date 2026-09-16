@@ -111,7 +111,7 @@ void ProblemGenerator::WellBalancing(ParameterInput *pin, const bool restart) {
   // Total energy density
   Real e0 = pin->GetOrAddReal("problem", "e0", 1.0);
   // Rest-mass density at the base of the atmosphere
-  Real rho0 = pin->GetOrAddReal("problem", "rho0", 0.8);
+  Real rho0 = pin->GetOrAddReal("problem", "rho0", 0.5);
   // Lapse at the base of the atmosphere
   Real alp0 = pin->GetOrAddReal("problem", "alp0", 0.4);
   // Gravitational gradient
@@ -149,8 +149,8 @@ void ProblemGenerator::WellBalancing(ParameterInput *pin, const bool restart) {
     Real x1v = CellCenterX(i-is, indcs.nx1, x1min, x1max);
     
     Real alpha = alp0 + (x1min + i*dx)*g;
-    Real P = P0 - e0*(x1min + i*dx)*g;
-    Real rho = e0 - P*gm1;
+    Real P = (alp0*P0 - e0*(alpha - alp0))/alpha;
+    Real rho = e0 - P/gm1;
 
     adm_.alpha(m, k, j, i) = alpha;
     adm_.g_dd(m, 0, 0, k, j, i) = 1.0;
