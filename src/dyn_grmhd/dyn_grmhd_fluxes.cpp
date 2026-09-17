@@ -200,6 +200,12 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     // Reconstruct Bcc over cells j in [jl-1, ju], i in [is-1, ie+1], n in [0, 2]
     ReconDispatch<IVY>(recon_method_, "dyngrflux_x2_recon_b", nmb1,
         kl, ku, jl-1, ju, is-1, ie+1, eos_, false, 3,     bcc0_, bl_, br_);
+    // Perform piecewise-equilibrium reconstruction of P if well balancing is enabled.
+    if (well_balanced_) {
+      WellBalancedDispatch<IVY>(recon_method_, "dyngrflux_x1_wb", nmb1,
+          kl, ku, jl-1, ju, is-1, ie+1, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+          nvars - nhyd);
+    }
 
     // Riemann solve over faces j in [jl, ju], i in [is-1, ie+1]
     par_for("dyngrflux_x2_rsolve", DevExeSpace(),
@@ -250,6 +256,12 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     // Reconstruct Bcc over the same cells, components n in [0, 2]
     ReconDispatch<IVZ>(recon_method_, "dyngrflux_x3_recon_b", nmb1,
         kl-1, ku, js-1, je+1, is-1, ie+1, eos_, false, 3,     bcc0_, bl_, br_);
+    // Perform piecewise-equilibrium reconstruction of P if well balancing is enabled.
+    if (well_balanced_) {
+      WellBalancedDispatch<IVZ>(recon_method_, "dyngrflux_x1_wb", nmb1,
+          kl-1, ku, js-1, je+1, is-1, ie+1, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+          nvars - nhyd);
+    }
 
     // Riemann solve over faces k in [kl, ku], j in [js-1, je+1], i in [is-1, ie+1]
     par_for("dyngrflux_x3_rsolve", DevExeSpace(),
