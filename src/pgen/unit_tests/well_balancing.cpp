@@ -75,8 +75,8 @@ bool CheckBalance(MeshBlockPack* pmbp, Real e0, Real tol) {
     const Real& alpha = adm_.alpha(m, k, j, i);
     gdd(0, 0) = gdd(1, 1) = gdd(2, 2) = 1.0;
     gdd(0, 1) = gdd(0, 2) = gdd(1, 2) = 0.0;
-    Real alpp = InterpToInterface<IVX, nghost, 1>(adm_.alpha, k, j, i, m);
-    Real alpm = InterpToInterface<IVX, nghost, -1>(adm_.alpha, k, j, i, m);
+    Real alpp = adm::InterpToInterface<IVX, nghost, 1>(adm_.alpha, k, j, i, m);
+    Real alpm = adm::InterpToInterface<IVX, nghost, -1>(adm_.alpha, k, j, i, m);
     Real Phat0 = w0_(m, IPR, k, j, i)*alpha;
 
     Real Peqp = IntegrateEquilibrium(Phat0, Phat0, e0, alpha, alpp, gdd, gdd, gdd);

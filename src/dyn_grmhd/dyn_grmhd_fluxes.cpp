@@ -82,6 +82,8 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
   int is = indcs_.is, ie = indcs_.ie;
   int js = indcs_.js, je = indcs_.je;
   int ks = indcs_.ks, ke = indcs_.ke;
+  int nghosts = indcs_.ng;
+  //int nghosts = 2;
 
   int nhyd  = pmy_pack->pmhd->nmhd;
   int nvars = pmy_pack->pmhd->nmhd + pmy_pack->pmhd->nscalars;
@@ -143,9 +145,15 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
         kl, ku, jl, ju, il-1, iu, eos_, false, 3,     bcc0_, bl_, br_);
     // Perform piecewise-equilibrium reconstruction of P if well balancing is enabled.
     if (well_balanced_) {
-      WellBalancedDispatch<IVX>(recon_method_, "dyngrflux_x1_wb", nmb1,
-          kl, ku, jl, ju, il-1, iu, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
-          nvars - nhyd);
+      if (nghosts == 2) {
+        WellBalancedDispatch<2,IVX>(recon_method_, "dyngrflux_x1_wb", nmb1,
+            kl, ku, jl, ju, il-1, iu, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+            nvars - nhyd);
+      } else {
+        WellBalancedDispatch<3,IVX>(recon_method_, "dyngrflux_x1_wb", nmb1,
+            kl, ku, jl, ju, il-1, iu, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+            nvars - nhyd);
+      }
     }
 
     // Riemann solve over faces i in [il, iu]
@@ -202,9 +210,15 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
         kl, ku, jl-1, ju, is-1, ie+1, eos_, false, 3,     bcc0_, bl_, br_);
     // Perform piecewise-equilibrium reconstruction of P if well balancing is enabled.
     if (well_balanced_) {
-      WellBalancedDispatch<IVY>(recon_method_, "dyngrflux_x1_wb", nmb1,
-          kl, ku, jl-1, ju, is-1, ie+1, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
-          nvars - nhyd);
+      if (nghosts == 2) {
+        WellBalancedDispatch<2, IVY>(recon_method_, "dyngrflux_x1_wb", nmb1,
+            kl, ku, jl-1, ju, is-1, ie+1, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+            nvars - nhyd);
+      } else {
+        WellBalancedDispatch<3, IVY>(recon_method_, "dyngrflux_x1_wb", nmb1,
+            kl, ku, jl-1, ju, is-1, ie+1, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+            nvars - nhyd);
+      }
     }
 
     // Riemann solve over faces j in [jl, ju], i in [is-1, ie+1]
@@ -258,9 +272,15 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
         kl-1, ku, js-1, je+1, is-1, ie+1, eos_, false, 3,     bcc0_, bl_, br_);
     // Perform piecewise-equilibrium reconstruction of P if well balancing is enabled.
     if (well_balanced_) {
-      WellBalancedDispatch<IVZ>(recon_method_, "dyngrflux_x1_wb", nmb1,
-          kl-1, ku, js-1, je+1, is-1, ie+1, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
-          nvars - nhyd);
+      if (nghosts == 2) {
+        WellBalancedDispatch<2, IVZ>(recon_method_, "dyngrflux_x1_wb", nmb1,
+            kl-1, ku, js-1, je+1, is-1, ie+1, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+            nvars - nhyd);
+      } else {
+        WellBalancedDispatch<3, IVZ>(recon_method_, "dyngrflux_x1_wb", nmb1,
+            kl-1, ku, js-1, je+1, is-1, ie+1, dyn_eos_, temperature_, adm_, w0_, wl_, wr_,
+            nvars - nhyd);
+      }
     }
 
     // Riemann solve over faces k in [kl, ku], j in [js-1, je+1], i in [is-1, ie+1]

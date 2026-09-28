@@ -198,6 +198,73 @@ void Face1Metric(const int m, const int k, const int j, const int i,
   return;
 }
 
+// A symmetric interpolation operator to compute the interface i+1/2.
+template<int ivx, int nghosts, int sign, class Arr, class... Idxs>
+KOKKOS_INLINE_FUNCTION
+decltype(auto) InterpToInterface(const Arr& q,
+                                 const int k, const int j, const int i, Idxs... idxs) {
+  constexpr int shifti = sign*(ivx == IVX);
+  constexpr int shiftj = sign*(ivx == IVY);
+  constexpr int shiftk = sign*(ivx == IVZ);
+  if constexpr (nghosts == 2) {
+    return Real(0.5)*(q(idxs..., k, j, i) + q(idxs..., k+shiftk, j+shiftj, i+shifti));
+  } else if constexpr (nghosts == 3) {
+    return -Real(1./16.)*(q(idxs..., k-shiftk, j-shiftj, i-shifti) +
+                          q(idxs..., k+2*shiftk, j+2*shiftj, i+2*shifti))
+           +Real(9./16.)*(q(idxs..., k, j, i) +
+                          q(idxs..., k+shiftk, j+shiftj, i+shifti));
+  } else if constexpr (nghosts == 4) {
+    return +Real(3./256.  )*(q(idxs..., k-2*shiftk, j-2*shiftj, i-2*shifti) +
+                             q(idxs..., k+3*shiftk, j+3*shiftj, i+3*shifti))
+           -Real(25./256. )*(q(idxs..., k-shiftk, j-shiftj, i-shifti) +
+                             q(idxs..., k+2*shiftk, j+2*shiftj, i+2*shifti))
+           +Real(150./256.)*(q(idxs..., k, j, i) +
+                             q(idxs..., k+shiftk, j+shiftj, i+shifti));
+  } else {
+    static_assert(!sizeof(Arr*), "Unsupported nghosts requested for InterpToInterface.");
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void FaceMetric
+//! \brief computes components of (dynamically evolved) 3-metric, lapse, and
+//  shift at faces
+//  check your indices: interface i lives between cells i and i-1
+
+template<int ivx>
+KOKKOS_INLINE_FUNCTION
+void FaceMetric(const int m, const int k, const int j, const int i,
+     const AthenaTensor<Real, TensorSymm::SYM2, 3, 2> &g_dd,
+     const AthenaTensor<Real, TensorSymm::NONE, 3, 1> &beta_u,
+     const AthenaTensor<Real, TensorSymm::NONE, 3, 0> &alpha,
+     Real gface1_dd[NSPMETRIC], Real betaface1_u[3], Real &alphaface1) {
+  /*constexpr int di = (ivx == IVX);
+  constexpr int dj = (ivx == IVY);
+  constexpr int dk = (ivx == IVZ);*/
+
+  //alphaface1 = (alpha(m,k,j,i) + alpha(m,k-dk,j-dj,i-di))*0.5;
+  alphaface1 = InterpToInterface<ivx, 3, -1>(alpha, k, j, i, m);
+
+  for (int a = 0; a < 3; ++a) {
+    //betaface1_u[a] = (beta_u(m,a,k,j,i) + beta_u(m,a,k-dk,j-dj,i-di))*0.5;
+    betaface1_u[a] = InterpToInterface<ivx, 3, -1>(beta_u, k, j, i, m, a);
+  }
+
+  /*gface1_dd[S11] = (g_dd(m,0,0,k,j,i) + g_dd(m,0,0,k-dk,j-dj,i-di))*0.5;
+  gface1_dd[S12] = (g_dd(m,0,1,k,j,i) + g_dd(m,0,1,k-dk,j-dj,i-di))*0.5;
+  gface1_dd[S13] = (g_dd(m,0,2,k,j,i) + g_dd(m,0,2,k-dk,j-dj,i-di))*0.5;
+  gface1_dd[S22] = (g_dd(m,1,1,k,j,i) + g_dd(m,1,1,k-dk,j-dj,i-di))*0.5;
+  gface1_dd[S23] = (g_dd(m,1,2,k,j,i) + g_dd(m,1,2,k-dk,j-dj,i-di))*0.5;
+  gface1_dd[S33] = (g_dd(m,2,2,k,j,i) + g_dd(m,2,2,k-dk,j-dj,i-di))*0.5;*/
+  gface1_dd[S11] = InterpToInterface<ivx, 3, -1>(g_dd, k, j, i, m, 0, 0);
+  gface1_dd[S12] = InterpToInterface<ivx, 3, -1>(g_dd, k, j, i, m, 0, 1);
+  gface1_dd[S13] = InterpToInterface<ivx, 3, -1>(g_dd, k, j, i, m, 0, 2);
+  gface1_dd[S22] = InterpToInterface<ivx, 3, -1>(g_dd, k, j, i, m, 1, 1);
+  gface1_dd[S23] = InterpToInterface<ivx, 3, -1>(g_dd, k, j, i, m, 1, 2);
+  gface1_dd[S33] = InterpToInterface<ivx, 3, -1>(g_dd, k, j, i, m, 2, 2);
+
+  return;
+}
 
 //----------------------------------------------------------------------------------------
 //! \fn void Face2Metric

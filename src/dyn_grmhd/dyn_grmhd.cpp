@@ -638,6 +638,10 @@ void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS(const DvceArray5D<Real
     // Fluid quantities
     Real prim_pt[NPRIM] = {0.0};
     prim_pt[PRH] = prim(m, IDN, k, j, i)/mb;
+    if (prim_pt[PRH] <= eos_.GetDensityFloor()) {
+      // No need to apply source terms to a vacuum
+      return;
+    }
     prim_pt[PVX] = prim(m, IVX, k, j, i);
     prim_pt[PVY] = prim(m, IVY, k, j, i);
     prim_pt[PVZ] = prim(m, IVZ, k, j, i);

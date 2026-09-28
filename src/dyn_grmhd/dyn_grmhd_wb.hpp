@@ -15,7 +15,7 @@
 #include "reconstruct/recon.hpp"
 
 // A symmetric interpolation operator to compute the interface i+1/2.
-template<int ivx, int nghosts, int sign, class Arr, class... Idxs>
+/*template<int ivx, int nghosts, int sign, class Arr, class... Idxs>
 KOKKOS_INLINE_FUNCTION
 decltype(auto) InterpToInterface(const Arr& q,
                                  const int k, const int j, const int i, Idxs... idxs) {
@@ -39,7 +39,7 @@ decltype(auto) InterpToInterface(const Arr& q,
   } else {
     static_assert(!sizeof(Arr*), "Unsupported nghosts requested for InterpToInterface.");
   }
-}
+}*/
 
 // An interpolation operator to compute the interface i+3/2. This is for working with the
 // local approximation
@@ -119,12 +119,17 @@ struct WBStateCenter {
 
     // Densitize the pressure and compute the densitized energy density
     Real n = w0(m, IDN, k, j, i)/pseos.ps.GetEOS().GetBaryonMass();
-    Phat = alp*sdetg*w0(m, IPR, k, j, i);
     Real Y[MAX_SPECIES];
     for (int s = 0; s < nscal; s++) {
       Y[s] = w0(m, IYF + s, k, j, i);
     }
-    etild = sdetg*pseos.ps.GetEOS().GetEnergy(n, temp(m, 0, k, j, i), Y);
+    if (n <= pseos.ps.GetEOS().GetDensityFloor()) {
+      Phat = 0.0;
+      etild = 0.0;
+    } else {
+      Phat = alp*sdetg*w0(m, IPR, k, j, i);
+      etild = sdetg*pseos.ps.GetEOS().GetEnergy(n, temp(m, 0, k, j, i), Y);
+    }
   }
 };
 
@@ -196,16 +201,16 @@ struct WBStateInterface {
                    const int i) {
     constexpr int sign = (shift > 0) ? 1 : -1;
     if constexpr (shift == 1 || shift == -1) {
-      alp = InterpToInterface<ivx, nghosts, sign>(adm.alpha, k, j, i, m);
+      alp = adm::InterpToInterface<ivx, nghosts, sign>(adm.alpha, k, j, i, m);
       for (int b = 0; b < 3; b++) {
         for (int a = b; a < 3; a++) {
-          gdd(b, a) = InterpToInterface<ivx, nghosts, sign>(adm.g_dd, k, j, i, m, b, a);
+          gdd(b, a) = adm::InterpToInterface<ivx, nghosts, sign>(adm.g_dd, k, j, i, m, b, a);
         }
       }
     } else {
       // This convoluted logic is for when we need to compute interfaces at i=+/- 3/2.
       // It could potentially also be used for higher-order calculations, too.
-      constexpr int di = sign*(ivx == IVX)*(shift*sign - 1);
+      /*constexpr int di = sign*(ivx == IVX)*(shift*sign - 1);
       constexpr int dj = sign*(ivx == IVY)*(shift*sign - 1);
       constexpr int dk = sign*(ivx == IVZ)*(shift*sign - 1);
       alp = InterpToInterface<ivx, nghosts, sign>(adm.alpha, k+dk, j+dj, i+di, m);
@@ -213,6 +218,13 @@ struct WBStateInterface {
         for (int a = b; a < 3; a++) {
           gdd(b, a) = InterpToInterface<ivx, nghosts, sign>(adm.g_dd,
                           k+dk, j+dj, i+di, m, b, a);
+        }
+      }*/
+      alp = InterpToNextInterface<ivx, nghosts, sign>(adm.alpha, k, j, i, m);
+      for (int b = 0; b < 3; b++) {
+        for (int a = b; a < 3; a++) {
+          gdd(b, a) = InterpToNextInterface<ivx, nghosts, sign>(adm.g_dd,
+                          k, j, i, m, b, a);
         }
       }
     } 
@@ -227,7 +239,8 @@ struct WBStateInterface {
   }
 };
 
-template<ReconstructionMethod recon, int ivx, class EOSPolicy, class ErrorPolicy>
+template<ReconstructionMethod recon, int nghost, int ivx,
+         class EOSPolicy, class ErrorPolicy>
 KOKKOS_INLINE_FUNCTION
 void WellBalancedCellT(const int m, const int k, const int j, const int i,
                        const PrimitiveSolverHydro<EOSPolicy, ErrorPolicy>& pseos,
@@ -241,7 +254,7 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
   // right interfaces for this cell
 
   // LEFT INTERFACE
-  WBStateInterface ip12{InterfacePolicy<ivx, 2, 1>(), adm, csi, csi.Phat, m, k, j, i};
+  WBStateInterface ip12{InterfacePolicy<ivx, nghost, 1>(), adm, csi, csi.Phat, m, k, j, i};
   if (ip12.Peqhat < 0.0) {
     // Abort the equilibrium calculation if there is no equilibrium.
     return;
@@ -249,13 +262,23 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
   // We'll need this later on to undensitize stuff
   Real volp12 = ip12.ComputeSpacetimeVolume();
   if (volp12 < Kokkos::Experimental::epsilon_v<Real>) {
-    // Abort the equilibrium calculation if the spacetime volume is too small; we're
-    // at a singularity.
     return;
+    // Sometimes coordinate singularities can cause issues with high-order interpolation,
+    // e.g., \sqrt{\gamma} \propto r^2 in spherical coordinates. In these cases, we first
+    // try to fall back to second-order interpolation, which is more reliable.
+    /*ip12 = WBStateInterface(InterfacePolicy<ivx, 2, 1>(), adm, csi, csi.Phat, m, k, j, i);
+
+    volp12 = ip12.ComputeSpacetimeVolume();
+
+    if (ip12.Peqhat < 0.0 || volp12 < Kokkos::Experimental::epsilon_v<Real>) {
+      // Abort the equilibrium calculation if the spacetime volume is too small; we're
+      // at a singularity.
+      return;
+    }*/
   }
 
   // RIGHT INTERFACE
-  WBStateInterface im12{InterfacePolicy<ivx, 2, -1>(), adm, csi, csi.Phat, m, k, j, i};
+  WBStateInterface im12{InterfacePolicy<ivx, nghost, -1>(), adm, csi, csi.Phat, m, k, j, i};
   if (im12.Peqhat < 0.0) {
     // Abort the equilibrium calculation if there is no equilibrium.
     return;
@@ -263,9 +286,19 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
   // We'll need this later on to undensitize stuff
   Real volm12 = im12.ComputeSpacetimeVolume();
   if (volm12 < Kokkos::Experimental::epsilon_v<Real>) {
-    // Abort the equilibrium calculation if the spacetime volume is too small; we're
-    // at a singularity.
     return;
+    // Sometimes coordinate singularities can cause issues with high-order interpolation,
+    // e.g., \sqrt{gamma} \propto r^2 in spherical coordinates. In these cases, we first
+    // try to fall back to second-order interpolation, which is more reliable.
+    /*im12 = WBStateInterface(InterfacePolicy<ivx,2,-1>(), adm, csi, csi.Phat, m, k, j, i);
+
+    volm12 = ip12.ComputeSpacetimeVolume();
+
+    if (im12.Peqhat < 0.0 || volm12 < Kokkos::Experimental::epsilon_v<Real>) {
+      // Abort the equilibrium calculation if the spacetime volume is too small; we're
+      // at a singularity.
+      return;
+    }*/
   }
 
   constexpr int di = (ivx == IVX);
@@ -296,7 +329,7 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     // Only continue integrating if we're not using PLM.
     if constexpr (recon != ReconstructionMethod::plm) {
       // Integrate to the i+3/2 interface
-      WBStateInterface ip32{InterfacePolicy<ivx,2,2>(), adm, csi, Peqhatp1, m, k, j, i};
+      WBStateInterface ip32{InterfacePolicy<ivx,nghost,2>(), adm, csi, Peqhatp1, m, k, j, i};
       if (ip32.Peqhat < 0.0) {
         return;
       }
@@ -329,7 +362,7 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     // Only continue integrating if we're not using PLM.
     if constexpr (recon != ReconstructionMethod::plm) {
       // Integrate to the i-3/2 interface
-      WBStateInterface im32{InterfacePolicy<ivx,2,-2>(), adm, csi, Peqhatm1, m, k, j, i};
+      WBStateInterface im32{InterfacePolicy<ivx,nghost,-2>(), adm, csi, Peqhatm1, m, k, j, i};
       if (im32.Peqhat < 0.0) {
         return;
       }
@@ -362,7 +395,7 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
   }
 }
 
-template<int ivx, class EOSPolicy, class ErrorPolicy>
+template<int nghost, int ivx, class EOSPolicy, class ErrorPolicy>
 inline void WellBalancedDispatch(ReconstructionMethod recon, const char *name,
                         int nmb1, int kl, int ku, int jl, int ju, int il, int iu,
                         const PrimitiveSolverHydro<EOSPolicy, ErrorPolicy>& pseos,
@@ -374,35 +407,35 @@ inline void WellBalancedDispatch(ReconstructionMethod recon, const char *name,
     case ReconstructionMethod::plm:
       par_for(name, DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        WellBalancedCellT<ReconstructionMethod::plm, ivx>(
+        WellBalancedCellT<ReconstructionMethod::plm, nghost, ivx>(
             m, k, j, i, pseos, temp, adm, w0, wl, wr, nscal);
       });
       break;
     case ReconstructionMethod::ppm4:
       par_for(name, DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        WellBalancedCellT<ReconstructionMethod::ppm4, ivx>(
+        WellBalancedCellT<ReconstructionMethod::ppm4, nghost, ivx>(
             m, k, j, i, pseos, temp, adm, w0, wl, wr, nscal);
       });
       break;
     case ReconstructionMethod::ppmx:
       par_for(name, DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        WellBalancedCellT<ReconstructionMethod::ppmx, ivx>(
+        WellBalancedCellT<ReconstructionMethod::ppmx, nghost, ivx>(
             m, k, j, i, pseos, temp, adm, w0, wl, wr, nscal);
       });
       break;
     case ReconstructionMethod::wenoz:
       par_for(name, DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        WellBalancedCellT<ReconstructionMethod::wenoz, ivx>(
+        WellBalancedCellT<ReconstructionMethod::wenoz, nghost, ivx>(
             m, k, j, i, pseos, temp, adm, w0, wl, wr, nscal);
       });
       break;
     case ReconstructionMethod::teno:
       par_for(name, DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        WellBalancedCellT<ReconstructionMethod::teno, ivx>(
+        WellBalancedCellT<ReconstructionMethod::teno, nghost, ivx>(
             m, k, j, i, pseos, temp, adm, w0, wl, wr, nscal);
       });
       break;
@@ -410,7 +443,7 @@ inline void WellBalancedDispatch(ReconstructionMethod recon, const char *name,
     default:
       par_for(name, DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        WellBalancedCellT<ReconstructionMethod::dc, ivx>(
+        WellBalancedCellT<ReconstructionMethod::dc, nghost, ivx>(
             m, k, j, i, pseos, temp, adm, w0, wl, wr, nscal);
       });
       break;
