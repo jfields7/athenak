@@ -72,15 +72,29 @@ bool CheckBalance(MeshBlockPack* pmbp, Real e0, Real tol) {
 
     // Compute the equilibrium pressures; note that we assume a constant metric.
     AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2> gdd;
+    AthenaPointTensor<Real, TensorSymm::NONE, 3, 1> beta_u;
     const Real& alpha = adm_.alpha(m, k, j, i);
     gdd(0, 0) = gdd(1, 1) = gdd(2, 2) = 1.0;
     gdd(0, 1) = gdd(0, 2) = gdd(1, 2) = 0.0;
+    beta_u.ZeroClear();
     Real alpp = adm::InterpToInterface<IVX, nghost, 1>(adm_.alpha, k, j, i, m);
     Real alpm = adm::InterpToInterface<IVX, nghost, -1>(adm_.alpha, k, j, i, m);
     Real Phat0 = w0_(m, IPR, k, j, i)*alpha;
+    // Stress tensor
+    AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2> hatS_uu;
+    hatS_uu.ZeroClear();
+    hatS_uu(0, 0) = hatS_uu(1, 1) = hatS_uu(2, 2) = Phat0;
 
-    Real Peqp = IntegrateEquilibrium(Phat0, Phat0, e0, alpha, alpp, gdd, gdd, gdd);
-    Real Peqm = IntegrateEquilibrium(Phat0, Phat0, e0, alpha, alpm, gdd, gdd, gdd);
+    // Momentum density
+    AthenaPointTensor<Real, TensorSymm::NONE, 3, 1> Stild_d;
+    Stild_d.ZeroClear();
+
+    /*Real Peqp = IntegrateEquilibrium(Phat0, Phat0, e0, alpha, alpp, gdd, gdd, gdd);
+    Real Peqm = IntegrateEquilibrium(Phat0, Phat0, e0, alpha, alpm, gdd, gdd, gdd);*/
+    Real Peqp = IntegrateEquilibrium(Phat0, e0, Stild_d, hatS_uu, alpha, alpp,
+                                     beta_u, beta_u, gdd, gdd);
+    Real Peqm = IntegrateEquilibrium(Phat0, e0, Stild_d, hatS_uu, alpha, alpm,
+                                     beta_u, beta_u, gdd, gdd);
 
     Real flux = (Peqp - Peqm)/dx;
 

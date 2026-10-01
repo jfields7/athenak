@@ -83,10 +83,14 @@ struct WBStateCenter {
   Real sdetg;
   AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2> gdd;
   AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2> guu;
+  AthenaPointTensor<Real, TensorSymm::NONE, 3, 1> beta_u;
 
   // Fluid variables
   Real Phat;
-  Real etild;
+  Real Etild;
+  AthenaPointTensor<Real, TensorSymm::NONE, 3, 1> Stild_d;
+  AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2> hatS_uu;
+  //Real etild;
 
   template<class EOSPolicy, class ErrorPolicy>
   KOKKOS_INLINE_FUNCTION
@@ -109,6 +113,7 @@ struct WBStateCenter {
       for (int a = b; a < 3; a++) {
         gdd(b, a) = adm.g_dd(m, b, a, k, j, i);
       }
+      beta_u(b) = adm.beta_u(m, b, k, j, i);
     }
     sdetg = Kokkos::sqrt(adm::SpatialDet(gdd(0, 0), gdd(0, 1), gdd(0, 2),
                                          gdd(1, 1), gdd(1, 2), gdd(2, 2)));
@@ -117,8 +122,62 @@ struct WBStateCenter {
                     &guu(0, 0), &guu(0, 1), &guu(0, 2),
                     &guu(1, 1), &guu(1, 2), &guu(2, 2));
 
+    // Compute the stress-energy tensor
+    Real rho = w0(m, IDN, k, j, i);
+    Real Y[MAX_SPECIES];
+    for (int s = 0; s < nscal; s++) {
+      Y[s] = w0(m, IYF + s, k, j, i);
+    }
+    Real n = rho/pseos.ps.GetEOS().GetBaryonMass();
+    if (n <= pseos.ps.GetEOS().GetDensityFloor()) {
+      // If we're below the floor, we have no sensible equilibrium. Force the source term
+      // to zero.
+      Phat = 0.0;
+      Etild = 0.0;
+      Stild_d.ZeroClear();
+      hatS_uu.ZeroClear();
+    } else {
+      Real rhoh = rho*pseos.ps.GetEOS().GetEnthalpy(n, temp(m, 0, k, j, i), Y);
+
+      Phat = alp*sdetg*w0(m, IPR, k, j, i);
+
+      // Extract the velocity
+      AthenaPointTensor<Real, TensorSymm::NONE, 3, 1> Wv_u;
+      Wv_u(0) = w0(m, IVX, k, j, i);
+      Wv_u(1) = w0(m, IVY, k, j, i);
+      Wv_u(2) = w0(m, IVZ, k, j, i);
+    
+      // Compute the Lorentz factor
+      Real Wsq = 0;
+      for (int a = 0; a < 3; a++) {
+        for (int b = 0; b < 3; b++) {
+          Wsq += gdd(a,b)*Wv_u(a)*Wv_u(b);
+        }
+      }
+      Wsq += 1.0;
+      Real W = Kokkos::sqrt(Wsq);
+
+      for (int a = 0; a < 3; a++) {
+        // Stress tensor
+        for (int b = a; b < 3; b++) {
+          hatS_uu(a, b) = alp*sdetg*rhoh*Wv_u(a)*Wv_u(b) + Phat*guu(a, b);
+        }
+
+        // Momentum
+        Stild_d(a) = 0;
+        // Lower the velocity component
+        for (int b = 0; b < 3; b++) {
+          Stild_d(a) += gdd(a, b)*Wv_u(b);
+        }
+        Stild_d(a) *= sdetg*rhoh*W;
+
+        // Energy
+        Etild = sdetg*(rhoh*Wsq - w0(m, IPR, k, j, i));
+      }
+    }
+
     // Densitize the pressure and compute the densitized energy density
-    Real n = w0(m, IDN, k, j, i)/pseos.ps.GetEOS().GetBaryonMass();
+    /*Real n = w0(m, IDN, k, j, i)/pseos.ps.GetEOS().GetBaryonMass();
     Real Y[MAX_SPECIES];
     for (int s = 0; s < nscal; s++) {
       Y[s] = w0(m, IYF + s, k, j, i);
@@ -129,7 +188,7 @@ struct WBStateCenter {
     } else {
       Phat = alp*sdetg*w0(m, IPR, k, j, i);
       etild = sdetg*pseos.ps.GetEOS().GetEnergy(n, temp(m, 0, k, j, i), Y);
-    }
+    }*/
   }
 };
 
@@ -156,29 +215,37 @@ struct WBStateCenter {
 //
 // Arguments:
 //   Peqhat0: the spacetime-densitized equilibrium pressure at x_0
-//   Phat1: the spacetime-densitized pressure at x_1
+//   Etildc: the volume-densitized energy density at the center of the cell
+//   Stild_dc: the volume-densitized lowered momentum density at the center of the cell
+//   hatS_uuc: the spacetime-densitized raised stress tensor at the center of the cell
 //   etild1: the volume-densitized total energy density at x_1
 //   alp0: the lapse at x_0
 //   alp1: the lapse at x_1
+//   beta_u0: the shift at x_0
+//   beta_u1: the shift at x_1
 //   gdd0: \gamma_{a b} at x_0
 //   gdd1: \gamma_{a b} at x_1
-//   guu1: \gamma^{a b} at x_1
 //
 // Returns: the equilibrium pressure integrated to x_1.
 //
 KOKKOS_INLINE_FUNCTION
-Real IntegrateEquilibrium(const Real Peqhat0, const Real Phat1, const Real etild1,
+Real IntegrateEquilibrium(const Real Peqhat0, const Real Etildc,
+                          const AthenaPointTensor<Real, TensorSymm::NONE, 3, 1>& Stild_dc,
+                          const AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2>& hatS_uuc,
                           const Real alp0, const Real alp1,
+                          const AthenaPointTensor<Real, TensorSymm::NONE, 3, 1>& beta_u0,
+                          const AthenaPointTensor<Real, TensorSymm::NONE, 3, 1>& beta_u1,
                           const AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2>& gdd0,
-                          const AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2>& gdd1,
-                          const AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2>& guu1) {
+                          const AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2>& gdd1) {
   Real tracediff = 0.0;
+  Real betadiff = 0.0;
   for (int a = 0; a < 3; a++) {
     for (int b = 0; b < 3; b++) {
-      tracediff += guu1(a, b)*(gdd1(a, b) - gdd0(a, b));
+      tracediff += hatS_uuc(a, b)*(gdd1(a, b) - gdd0(a, b));
     }
+    betadiff += Stild_dc(a)*(beta_u1(a) - beta_u0(a));
   }
-  return Peqhat0 + 0.5*Phat1*tracediff - etild1*(alp1 - alp0);
+  return Peqhat0 + 0.5*tracediff + betadiff - Etildc*(alp1 - alp0);
 }
 
 // This is needed because the constructor to WBStateInterface is templated; while
@@ -192,6 +259,7 @@ struct WBStateInterface {
   Real alp;
   Real Peqhat;
   AthenaPointTensor<Real, TensorSymm::SYM2, 3, 2> gdd;
+  AthenaPointTensor<Real, TensorSymm::NONE, 3, 1> beta_u;
 
   template<int ivx, int nghosts, int shift>
   KOKKOS_INLINE_FUNCTION
@@ -206,6 +274,7 @@ struct WBStateInterface {
         for (int a = b; a < 3; a++) {
           gdd(b, a) = adm::InterpToInterface<ivx, nghosts, sign>(adm.g_dd, k, j, i, m, b, a);
         }
+        beta_u(b) = adm::InterpToInterface<ivx, nghosts, sign>(adm.beta_u, k, j, i, m, b);
       }
     } else {
       // This convoluted logic is for when we need to compute interfaces at i=+/- 3/2.
@@ -226,10 +295,12 @@ struct WBStateInterface {
           gdd(b, a) = InterpToNextInterface<ivx, nghosts, sign>(adm.g_dd,
                           k, j, i, m, b, a);
         }
+        beta_u(b) = InterpToNextInterface<ivx, nghosts, sign>(adm.beta_u,
+                          k, j, i, m, b);
       }
     } 
-    Peqhat = IntegrateEquilibrium(Phateq_, state.Phat, state.etild,
-                                  state.alp, alp, state.gdd, gdd, state.guu);
+    Peqhat = IntegrateEquilibrium(Phateq_, state.Etild, state.Stild_d, state.hatS_uu,
+                                  state.alp, alp, state.beta_u, beta_u, state.gdd, gdd);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -314,8 +385,11 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
 
     // Integrate to i+1
     csi.SetState(pseos, adm, temp, w0, nscal, m, k+dk, j+dj, i+di);
-    Real Peqhatp1 = IntegrateEquilibrium(ip12.Peqhat, csi.Phat, csi.etild, ip12.alp,
-                                         csi.alp, ip12.gdd, csi.gdd, csi.guu);
+    /*Real Peqhatp1 = IntegrateEquilibrium(ip12.Peqhat, csi.Phat, csi.etild, ip12.alp,
+                                         csi.alp, ip12.gdd, csi.gdd, csi.guu);*/
+      Real Peqhatp1 = IntegrateEquilibrium(ip12.Peqhat, csi.Etild, csi.Stild_d,
+                                           csi.hatS_uu, ip12.alp, csi.alp, ip12.beta_u,
+                                           csi.beta_u, ip12.gdd, csi.gdd);
     if (Peqhatp1 < 0.0) {
       // Abort the equilibrium calculation if there is no equilibrium.
       return;
@@ -336,8 +410,11 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
 
       // Integrate to the i+2 cell
       csi.SetState(pseos, adm, temp, w0, nscal, m, k+2*dk, j+2*dj, i+2*di);
-      Real Peqhatp2 = IntegrateEquilibrium(ip32.Peqhat, csi.Phat, csi.etild, ip32.alp,
-                                           csi.alp, ip32.gdd, csi.gdd, csi.guu);
+      /*Real Peqhatp2 = IntegrateEquilibrium(ip32.Peqhat, csi.Phat, csi.etild, ip32.alp,
+                                           csi.alp, ip32.gdd, csi.gdd, csi.guu);*/
+      Real Peqhatp2 = IntegrateEquilibrium(ip32.Peqhat, csi.Etild, csi.Stild_d,
+                                           csi.hatS_uu, ip32.alp, csi.alp, ip32.beta_u,
+                                           csi.beta_u, ip32.gdd, csi.gdd);
       if (Peqhatp2 < 0.0) {
         // Abort the equilibrium calculation if there is no equilibrium.
         return;
@@ -347,8 +424,11 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
 
     // Integrate to i-1
     csi.SetState(pseos, adm, temp, w0, nscal, m, k-dk, j-dj, i-di);
-    Real Peqhatm1 = IntegrateEquilibrium(im12.Peqhat, csi.Phat, csi.etild, im12.alp,
-                                         csi.alp, im12.gdd, csi.gdd, csi.guu);
+    /*Real Peqhatm1 = IntegrateEquilibrium(im12.Peqhat, csi.Phat, csi.etild, im12.alp,
+                                         csi.alp, im12.gdd, csi.gdd, csi.guu);*/
+    Real Peqhatm1 = IntegrateEquilibrium(im12.Peqhat, csi.Etild, csi.Stild_d,
+                                         csi.hatS_uu, im12.alp, csi.alp, im12.beta_u,
+                                         csi.beta_u, im12.gdd, csi.gdd);
     if (Peqhatm1 < 0.0) {
       // Abort the equilibrium calculation if there is no equilibrium.
       return;
@@ -369,8 +449,11 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
 
       // Integrate to the i-2 cell
       csi.SetState(pseos, adm, temp, w0, nscal, m, k-2*dk, j-2*dj, i-2*di);
-      Real Peqhatm2 = IntegrateEquilibrium(im32.Peqhat, csi.Phat, csi.etild, im32.alp,
-                                           csi.alp, im32.gdd, csi.gdd, csi.guu);
+      /*Real Peqhatm2 = IntegrateEquilibrium(im32.Peqhat, csi.Phat, csi.etild, im32.alp,
+                                           csi.alp, im32.gdd, csi.gdd, csi.guu);*/
+      Real Peqhatm2 = IntegrateEquilibrium(im32.Peqhat, csi.Etild, csi.Stild_d,
+                                           csi.hatS_uu, im32.alp, csi.alp, im32.beta_u,
+                                           csi.beta_u, im32.gdd, csi.gdd);
       if (Peqhatm2 < 0.0) {
         // Abort the equilibrium calculation if there is no equilibrium.
         return;
