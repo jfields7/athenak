@@ -63,7 +63,7 @@ decltype(auto) InterpToNextInterface(const Arr& q,
             Real(5./16.)*q(idxs..., k+2*shiftk, j+2*shiftj, i+2*shifti));
   } else if constexpr (nghosts == 4) {
     // In the 6th-order case, we interpolate a quintic polynomial centered on i+1/2.
-    return (Real(3./256.)*q(idxs..., k-2*shiftk, j-2*shiftj, i-2*shifti) -
+    return (-Real(3./256.)*q(idxs..., k-2*shiftk, j-2*shiftj, i-2*shifti) +
             Real(21./256.)*q(idxs..., k-shiftk, j-shiftj, i-shifti)) +
            (-Real(70./256.)*q(idxs..., k, j, i) -
             Real(7./256.)*q(idxs..., k+3*shiftk, j+3*shiftj, i+3*shifti)) +
@@ -170,10 +170,10 @@ struct WBStateCenter {
           Stild_d(a) += gdd(a, b)*Wv_u(b);
         }
         Stild_d(a) *= sdetg*rhoh*W;
-
-        // Energy
-        Etild = sdetg*(rhoh*Wsq - w0(m, IPR, k, j, i));
       }
+
+      // Energy
+      Etild = sdetg*(rhoh*Wsq - w0(m, IPR, k, j, i));
     }
 
     // Densitize the pressure and compute the densitized energy density
@@ -264,7 +264,7 @@ struct WBStateInterface {
   template<int ivx, int nghosts, int shift>
   KOKKOS_INLINE_FUNCTION
   WBStateInterface(InterfacePolicy<ivx, nghosts, shift> policy,
-                   const adm::ADM::ADM_vars& adm, const WBStateCenter& state,
+                   const adm::ADM::ADM_vars& adm, const WBStateCenter& center,
                    const Real& Phateq_, const int m, const int k, const int j,
                    const int i) {
     constexpr int sign = (shift > 0) ? 1 : -1;
@@ -299,8 +299,8 @@ struct WBStateInterface {
                           k, j, i, m, b);
       }
     } 
-    Peqhat = IntegrateEquilibrium(Phateq_, state.Etild, state.Stild_d, state.hatS_uu,
-                                  state.alp, alp, state.beta_u, beta_u, state.gdd, gdd);
+    Peqhat = IntegrateEquilibrium(Phateq_, center.Etild, center.Stild_d, center.hatS_uu,
+                                center.alp, alp, center.beta_u, beta_u, center.gdd, gdd);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -324,7 +324,7 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
   // Regardless of the method, we need to compute the equilibrium pressure at the left and
   // right interfaces for this cell
 
-  // LEFT INTERFACE
+  // LEFT INTERFACE OF i+1/2
   WBStateInterface ip12{InterfacePolicy<ivx, nghost, 1>(), adm, csi, csi.Phat, m, k, j, i};
   if (ip12.Peqhat < 0.0) {
     // Abort the equilibrium calculation if there is no equilibrium.
@@ -348,7 +348,7 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     }*/
   }
 
-  // RIGHT INTERFACE
+  // RIGHT INTERFACE OF i-1/2
   WBStateInterface im12{InterfacePolicy<ivx, nghost, -1>(), adm, csi, csi.Phat, m, k, j, i};
   if (im12.Peqhat < 0.0) {
     // Abort the equilibrium calculation if there is no equilibrium.
@@ -387,9 +387,9 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     csi.SetState(pseos, adm, temp, w0, nscal, m, k+dk, j+dj, i+di);
     /*Real Peqhatp1 = IntegrateEquilibrium(ip12.Peqhat, csi.Phat, csi.etild, ip12.alp,
                                          csi.alp, ip12.gdd, csi.gdd, csi.guu);*/
-      Real Peqhatp1 = IntegrateEquilibrium(ip12.Peqhat, csi.Etild, csi.Stild_d,
-                                           csi.hatS_uu, ip12.alp, csi.alp, ip12.beta_u,
-                                           csi.beta_u, ip12.gdd, csi.gdd);
+    Real Peqhatp1 = IntegrateEquilibrium(ip12.Peqhat, csi.Etild, csi.Stild_d,
+                                         csi.hatS_uu, ip12.alp, csi.alp, ip12.beta_u,
+                                         csi.beta_u, ip12.gdd, csi.gdd);
     if (Peqhatp1 < 0.0) {
       // Abort the equilibrium calculation if there is no equilibrium.
       return;
