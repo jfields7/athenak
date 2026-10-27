@@ -135,7 +135,8 @@ class MeshBlockPack;
 
 class MeshBoundaryValues {
  public:
-  MeshBoundaryValues(MeshBlockPack *ppack, ParameterInput *pin, bool z4c);
+  MeshBoundaryValues(MeshBlockPack *ppack, ParameterInput *pin, bool z4c,
+                     bool host_stage);
   virtual ~MeshBoundaryValues();
 
   // data for all 56 buffers in most general 3D case. Not all elements used in most cases.
@@ -157,6 +158,7 @@ class MeshBoundaryValues {
   std::vector<RankPackedVarMessage> send_var_msgs_, recv_var_msgs_;
   std::vector<MPI_Request> send_var_reqs_, recv_var_reqs_;
   DvceArray1D<Real> rank_sendbuf_vars_, rank_recvbuf_vars_;
+  HostArray1D<Real> host_rank_sendbuf_vars_, host_rank_recvbuf_vars_;
   // Scratch host buffers holding the (lid,dn,data_size) triples per entry, used
   // only for the one-shot header exchange in BuildRankPackedVarMetadata that
   // teaches each receiver its peers' pack order.
@@ -201,6 +203,7 @@ class MeshBoundaryValues {
   // many types (Hydro, MHD, Radiation, Z4c, etc.)
   MeshBlockPack* pmy_pack;
   bool is_z4c_;   // flag to denote if this BoundaryValues is for Z4c module
+  bool host_stage_; // flag to denote if communications should be staged on the host.
 
 #if MPI_PARALLEL_ENABLED
   int GetVarDataSize(const MeshBoundaryBuffer &buf, int m, int n, int nvars) const;
@@ -214,7 +217,8 @@ class MeshBoundaryValues {
 
 class MeshBoundaryValuesCC : public MeshBoundaryValues {
  public:
-  MeshBoundaryValuesCC(MeshBlockPack *ppack, ParameterInput *pin, bool z4c);
+  MeshBoundaryValuesCC(MeshBlockPack *ppack, ParameterInput *pin, bool z4c,
+                       bool host_stage);
 
   //functions
   void InitSendIndices(MeshBoundaryBuffer &b,int o1,int o2,int o3,int f1,int f2) override;
@@ -246,7 +250,7 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
 
 class MeshBoundaryValuesFC : public MeshBoundaryValues {
  public:
-  MeshBoundaryValuesFC(MeshBlockPack *ppack, ParameterInput *pin);
+  MeshBoundaryValuesFC(MeshBlockPack *ppack, ParameterInput *pin, bool host_stage);
 
   //functions
   void InitSendIndices(MeshBoundaryBuffer &b,int o1,int o2,int o3,int f1,int f2) override;

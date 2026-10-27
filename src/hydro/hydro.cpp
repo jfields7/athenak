@@ -156,7 +156,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   // allocate boundary buffers for conserved (cell-centered) variables
-  pbval_u = new MeshBoundaryValuesCC(ppack, pin, false);
+  pbval_u = new MeshBoundaryValuesCC(ppack, pin, false,pmy_pack->pmesh->host_stage);
   pbval_u->InitializeBuffers((nhydro+nscalars));
 
   // Orbital advection and shearing box BCs (if requested in input file)

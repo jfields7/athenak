@@ -25,7 +25,8 @@
 //----------------------------------------------------------------------------------------
 // MeshBoundaryValues constructor:
 
-MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, bool z4c) :
+MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, bool z4c,
+bool host_stage) :
   u_in("uin",1,1),
   b_in("bin",1,1),
   i_in("iin",1,1)
@@ -35,6 +36,8 @@ MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, b
   rank_packed_mesh_seq_(-1),
   rank_sendbuf_vars_("rank_sendbuf_vars",1),
   rank_recvbuf_vars_("rank_recvbuf_vars",1),
+  host_rank_sendbuf_vars_("host_rank_sendbuf_vars",1),
+  host_rank_recvbuf_vars_("host_rank_recvbuf_vars",1),
   rank_sendhdr_vars_("rank_sendhdr_vars",1),
   rank_recvhdr_vars_("rank_recvhdr_vars",1),
   send_agg_offset_("send_agg_offset",1),
@@ -42,7 +45,8 @@ MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, b
 #endif
   ,
   pmy_pack(pp),
-  is_z4c_(z4c) {
+  is_z4c_(z4c),
+  host_stage_(host_stage) {
   // allocate vector of status flags and MPI requests (if needed)
   int nnghbr = pmy_pack->pmb->nnghbr;
 
@@ -227,6 +231,10 @@ void MeshBoundaryValues::BuildRankPackedVarMetadata(const int nvars) {
   Kokkos::realloc(rank_recvbuf_vars_, std::max(1, recv_total));
   Kokkos::realloc(rank_sendhdr_vars_, std::max(1, send_hdr_total));
   Kokkos::realloc(rank_recvhdr_vars_, std::max(1, recv_hdr_total));
+  if (host_stage_) {
+    Kokkos::realloc(host_rank_sendbuf_vars_, std::max(1, send_total));
+    Kokkos::realloc(host_rank_recvbuf_vars_, std::max(1, recv_total));
+  }
 
   send_var_reqs_.assign(send_var_msgs_.size(), MPI_REQUEST_NULL);
   recv_var_reqs_.assign(recv_var_msgs_.size(), MPI_REQUEST_NULL);

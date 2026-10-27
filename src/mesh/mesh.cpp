@@ -50,6 +50,7 @@ Mesh::Mesh(ParameterInput *pin) :
   two_d(false),
   three_d(false),
   multi_d(false),
+  host_stage(false),
   nprtcl_thisrank(0),
   nprtcl_total(0),
   dtold(0.),
@@ -191,6 +192,10 @@ Mesh::Mesh(ParameterInput *pin) :
     mesh_bcs[BoundaryFace::inner_x3] = BoundaryFlag::undef;
     mesh_bcs[BoundaryFace::outer_x3] = BoundaryFlag::undef;
   }
+
+  // set boolean flag indicating if communications should be staged on the host (true)
+  // or device-to-device (false, default)
+  host_stage = pin->GetOrAddBoolean("mesh_communication","host_stage",false);
 
   // set boolean flags indicating type of refinement (if any), and whether mesh is
   // periodic, depending on input strings

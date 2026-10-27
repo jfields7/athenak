@@ -218,9 +218,9 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   // allocate boundary buffers for conserved (cell-centered) and face-centered variables
-  pbval_u = new MeshBoundaryValuesCC(ppack, pin, false);
+  pbval_u = new MeshBoundaryValuesCC(ppack, pin, false, ppack->pmesh->host_stage);
   pbval_u->InitializeBuffers((nmhd+nscalars));
-  pbval_b = new MeshBoundaryValuesFC(ppack, pin);
+  pbval_b = new MeshBoundaryValuesFC(ppack, pin, ppack->pmesh->host_stage);
   pbval_b->InitializeBuffers(3);
 
   // Orbital advection and shearing box BCs (if requested in input file)

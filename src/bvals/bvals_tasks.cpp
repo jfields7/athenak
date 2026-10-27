@@ -45,14 +45,23 @@ TaskStatus MeshBoundaryValues::InitRecv(const int nvars) {
   bool no_errors = true;
   for (std::size_t i = 0; i < recv_var_msgs_.size(); ++i) {
     auto &msg = recv_var_msgs_[i];
-    int ierr = MPI_Irecv(rank_recvbuf_vars_.data() + msg.offset, msg.data_size,
-                     MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &recv_var_reqs_[i]);
+    int ierr;
+    if (!host_stage_) {
+      ierr = MPI_Irecv(rank_recvbuf_vars_.data() + msg.offset, msg.data_size,
+                       MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &recv_var_reqs_[i]);
+    } else {
+      ierr = MPI_Irecv(host_rank_recvbuf_vars_.data() + msg.offset, msg.data_size,
+                       MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &recv_var_reqs_[i]);
+    }
     if (ierr != MPI_SUCCESS) no_errors = false;
   }
   if (!(no_errors)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "MPI error in posting rank-packed receives" << std::endl;
     std::exit(EXIT_FAILURE);
+  }
+  if (host_stage_) {
+    Kokkos::deep_copy(host_rank_recvbuf_vars_, rank_recvbuf_vars_);
   }
 #endif
   return TaskStatus::complete;

@@ -116,6 +116,7 @@ class Mesh {
   bool multi_d;               // flag to indicate 2D and 3D calculations
   bool multilevel;            // true for SMR and AMR
   bool adaptive;              // true only for AMR
+  bool host_stage;           // communications are staged on the host first
 
   int nmb_rootx1, nmb_rootx2, nmb_rootx3; // # of MeshBlocks at root level in each dir
   int nmb_total;           // total number of MeshBlocks across all levels/ranks

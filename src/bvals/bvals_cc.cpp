@@ -23,8 +23,8 @@
 // BValCC constructor:
 
 MeshBoundaryValuesCC::MeshBoundaryValuesCC(MeshBlockPack *pp, ParameterInput *pin,
-                                           bool z4c) :
-  MeshBoundaryValues(pp, pin, z4c) {
+                                           bool z4c, bool host_stage) :
+  MeshBoundaryValues(pp, pin, z4c, host_stage) {
 }
 
 //----------------------------------------------------------------------------------------
@@ -248,12 +248,22 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
   bool no_errors = true;
   std::fill(send_var_reqs_.begin(), send_var_reqs_.end(), MPI_REQUEST_NULL);
 
+  if (host_stage_) {
+    Kokkos::deep_copy(rank_sendbuf_vars_, host_rank_sendbuf_vars_);
+  }
+
   // Payload-only Isend: the receiver already knows the layout of this payload
   // from the one-shot header exchange done during BuildRankPackedVarMetadata.
   for (std::size_t i = 0; i < send_var_msgs_.size(); ++i) {
     const auto &msg = send_var_msgs_[i];
-    int ierr = MPI_Isend(rank_sendbuf_vars_.data() + msg.offset, msg.data_size,
-                     MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &send_var_reqs_[i]);
+    int ierr;
+    if (!host_stage_) {
+      ierr = MPI_Isend(rank_sendbuf_vars_.data() + msg.offset, msg.data_size,
+                       MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &send_var_reqs_[i]);
+    } else {
+      ierr = MPI_Isend(host_rank_sendbuf_vars_.data() + msg.offset, msg.data_size,
+                       MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &send_var_reqs_[i]);
+    }
     if (ierr != MPI_SUCCESS) no_errors = false;
   }
   // Quit if MPI error detected

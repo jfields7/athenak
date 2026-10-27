@@ -33,7 +33,7 @@
 MultigridBoundaryValues::MultigridBoundaryValues(
     MeshBlockPack *pmbp, ParameterInput *pin,
     bool coarse, Multigrid *pmg)
-  : MeshBoundaryValuesCC(pmbp, pin, coarse), pmy_mg(pmg) {
+  : MeshBoundaryValuesCC(pmbp, pin, coarse, false), pmy_mg(pmg) {
   // Multigrid boundary communications always use the rank-packed scheme; there is
   // no runtime switch to select a different communication path.
 }
