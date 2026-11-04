@@ -123,13 +123,8 @@ struct WBStateCenter {
     for (int s = 0; s < nscal; s++) {
       Y[s] = w0(m, IYF + s, k, j, i);
     }
-    if (n <= pseos.ps.GetEOS().GetDensityFloor()) {
-      Phat = 0.0;
-      etild = 0.0;
-    } else {
-      Phat = alp*sdetg*w0(m, IPR, k, j, i);
-      etild = sdetg*pseos.ps.GetEOS().GetEnergy(n, temp(m, 0, k, j, i), Y);
-    }
+    Phat = alp*sdetg*w0(m, IPR, k, j, i);
+    etild = sdetg*pseos.ps.GetEOS().GetEnergy(n, temp(m, 0, k, j, i), Y);
   }
 };
 
