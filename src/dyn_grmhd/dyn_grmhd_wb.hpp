@@ -123,8 +123,13 @@ struct WBStateCenter {
     for (int s = 0; s < nscal; s++) {
       Y[s] = w0(m, IYF + s, k, j, i);
     }
-    Phat = alp*sdetg*w0(m, IPR, k, j, i);
-    etild = sdetg*pseos.ps.GetEOS().GetEnergy(n, temp(m, 0, k, j, i), Y);
+    if (n <= pseos.ps.GetEOS().GetDensityFloor()) {
+      Phat = 0.0;
+      etild = 0.0;
+    } else {
+      Phat = alp*sdetg*w0(m, IPR, k, j, i);
+      etild = sdetg*pseos.ps.GetEOS().GetEnergy(n, temp(m, 0, k, j, i), Y);
+    }
   }
 };
 
@@ -250,10 +255,10 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
 
   // LEFT INTERFACE
   WBStateInterface ip12{InterfacePolicy<ivx, nghost, 1>(), adm, csi, csi.Phat, m, k, j, i};
-  if (ip12.Peqhat < 0.0) {
+  /*if (ip12.Peqhat < 0.0) {
     // Abort the equilibrium calculation if there is no equilibrium.
     return;
-  }
+  }*/
   // We'll need this later on to undensitize stuff
   Real volp12 = ip12.ComputeSpacetimeVolume();
   if (volp12 < Kokkos::Experimental::epsilon_v<Real>) {
@@ -274,10 +279,10 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
 
   // RIGHT INTERFACE
   WBStateInterface im12{InterfacePolicy<ivx, nghost, -1>(), adm, csi, csi.Phat, m, k, j, i};
-  if (im12.Peqhat < 0.0) {
+  /*if (im12.Peqhat < 0.0) {
     // Abort the equilibrium calculation if there is no equilibrium.
     return;
-  }
+  }*/
   // We'll need this later on to undensitize stuff
   Real volm12 = im12.ComputeSpacetimeVolume();
   if (volm12 < Kokkos::Experimental::epsilon_v<Real>) {
@@ -311,10 +316,10 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     csi.SetState(pseos, adm, temp, w0, nscal, m, k+dk, j+dj, i+di);
     Real Peqhatp1 = IntegrateEquilibrium(ip12.Peqhat, csi.Phat, csi.etild, ip12.alp,
                                          csi.alp, ip12.gdd, csi.gdd, csi.guu);
-    if (Peqhatp1 < 0.0) {
+    /*if (Peqhatp1 < 0.0) {
       // Abort the equilibrium calculation if there is no equilibrium.
       return;
-    }
+    }*/
     // Store these values now so that the compiler can clear much larger objects from
     // register space.
     Real Peqhatp12 = ip12.Peqhat;
@@ -325,18 +330,18 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     if constexpr (recon != ReconstructionMethod::plm) {
       // Integrate to the i+3/2 interface
       WBStateInterface ip32{InterfacePolicy<ivx,nghost,2>(), adm, csi, Peqhatp1, m, k, j, i};
-      if (ip32.Peqhat < 0.0) {
+      /*if (ip32.Peqhat < 0.0) {
         return;
-      }
+      }*/
 
       // Integrate to the i+2 cell
       csi.SetState(pseos, adm, temp, w0, nscal, m, k+2*dk, j+2*dj, i+2*di);
       Real Peqhatp2 = IntegrateEquilibrium(ip32.Peqhat, csi.Phat, csi.etild, ip32.alp,
                                            csi.alp, ip32.gdd, csi.gdd, csi.guu);
-      if (Peqhatp2 < 0.0) {
+      /*if (Peqhatp2 < 0.0) {
         // Abort the equilibrium calculation if there is no equilibrium.
         return;
-      }
+      }*/
       dPhatp2 = csi.Phat - Peqhatp2;
     }
 
@@ -344,10 +349,10 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     csi.SetState(pseos, adm, temp, w0, nscal, m, k-dk, j-dj, i-di);
     Real Peqhatm1 = IntegrateEquilibrium(im12.Peqhat, csi.Phat, csi.etild, im12.alp,
                                          csi.alp, im12.gdd, csi.gdd, csi.guu);
-    if (Peqhatm1 < 0.0) {
+    /*if (Peqhatm1 < 0.0) {
       // Abort the equilibrium calculation if there is no equilibrium.
       return;
-    }
+    }*/
     // Store these values now so that the compiler can clear much larger objects from
     // register space.
     Real Peqhatm12 = im12.Peqhat;
@@ -358,18 +363,18 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     if constexpr (recon != ReconstructionMethod::plm) {
       // Integrate to the i-3/2 interface
       WBStateInterface im32{InterfacePolicy<ivx,nghost,-2>(), adm, csi, Peqhatm1, m, k, j, i};
-      if (im32.Peqhat < 0.0) {
+      /*if (im32.Peqhat < 0.0) {
         return;
-      }
+      }*/
 
       // Integrate to the i-2 cell
       csi.SetState(pseos, adm, temp, w0, nscal, m, k-2*dk, j-2*dj, i-2*di);
       Real Peqhatm2 = IntegrateEquilibrium(im32.Peqhat, csi.Phat, csi.etild, im32.alp,
                                            csi.alp, im32.gdd, csi.gdd, csi.guu);
-      if (Peqhatm2 < 0.0) {
+      /*if (Peqhatm2 < 0.0) {
         // Abort the equilibrium calculation if there is no equilibrium.
         return;
-      }
+      }*/
       dPhatm2 = csi.Phat - Peqhatm2;
     }
 
@@ -385,8 +390,10 @@ void WellBalancedCellT(const int m, const int k, const int j, const int i,
     } else if constexpr (recon == ReconstructionMethod::teno) {
       TENO(dPhatm2, dPhatm1, 0, dPhatp1, dPhatp2, Phatl, Phatr);
     }
-    wl(m, IPR, k + dk, j + dj, i + di) = (Phatl + Peqhatp12)/volp12;
-    wr(m, IPR, k, j, i) = (Phatr + Peqhatm12)/volm12;
+    if (Phatl + Peqhatp12 >= 0 && Phatr + Peqhatm12 >= 0) {
+      wl(m, IPR, k + dk, j + dj, i + di) = (Phatl + Peqhatp12)/volp12;
+      wr(m, IPR, k, j, i) = (Phatr + Peqhatm12)/volm12;
+    }
   }
 }
 
