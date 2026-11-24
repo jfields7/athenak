@@ -4,7 +4,8 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file ebh.cpp
-//  \brief Problem generator for loading data from the RNS code
+//  \brief Problem generator for loading data from the RNS code and superimposing a
+//  Schwarzschild black hole in CKS coordinates on top.
 
 #include <algorithm>
 #include <cmath>
@@ -30,7 +31,19 @@
 
 #include "RNS.h"
 
+namespace {
+
+struct RNSData {
+  ini_data* data;
+};
+
+RNSData* prns_data;
+
+} // namespace
+
 void LoadRNSData(MeshBlockPack *pmbp, ParameterInput *pin);
+
+void AddBlackHole(MeshBlockPack *pmbp, ParameterInput *pin);
 
 //----------------------------------------------------------------------------------------
 //! \fn ProblemGenerator::UserProblem()
@@ -51,6 +64,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   // Load the RNS data
   LoadRNSData(pmbp, pin);
+
+  // Superimpose the black hole
+  AddBlackHole(pmbp, pin);
 
   auto &indcs = pmy_mesh_->mb_indcs;
   int &is = indcs.is; int &ie = indcs.ie;
@@ -91,6 +107,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     bcc0(m, IBZ, k, j, i) = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k+1, j, i));
   });
 
+  pmbp->pcoord->UpdateExcisionMasks();
 
   // Calculate conserved variables and Z4c variables
   pmbp->pdyngr->PrimToConInit(0, (ncells1-1), 0, (ncells2-1), 0, (ncells3-1));
@@ -316,4 +333,165 @@ void LoadRNSData(MeshBlockPack *pmbp, ParameterInput *pin) {
     Kokkos::deep_copy(u_z4c, host_u_z4c);
   }
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn AddBlackHole()
+//! \brief Superimpose a Schwarzschild black hole in CKS coordinates.
+void AddBlackHole(MeshBlockPack *pmbp, ParameterInput *pin) {
+  Real mass = pin->GetOrAddReal("problem", "bh_mass", 0.1);
+
+   // Some utility information we need
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  auto &size = pmbp->pmb->mb_size;
+  int &is = indcs.is; int &ie = indcs.ie;
+  int &js = indcs.js; int &je = indcs.je;
+  int &ks = indcs.ks; int &ke = indcs.ke;
+
+  int ncells1 = indcs.nx1 + 2*(indcs.ng);
+  int ncells2 = indcs.nx2 + 2*(indcs.ng);
+  int ncells3 = indcs.nx3 + 2*(indcs.ng);
+  int nmb = pmbp->nmb_thispack;
+
+  auto &adm = pmbp->padm->adm;
+ 
+  par_for("pgen_add_black_hole", DevExeSpace(), 0, nmb-1,0,(ncells3-1),0,(ncells2-1),
+  0,(ncells1-1),KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    Real x1v = CellCenterX(i-is, indcs.nx1, x1min, x1max);
+
+    Real &x2min = size.d_view(m).x2min;
+    Real &x2max = size.d_view(m).x2max;
+    Real x2v = CellCenterX(j-js, indcs.nx2, x2min, x2max);
+
+    Real &x3min = size.d_view(m).x3min;
+    Real &x3max = size.d_view(m).x3max;
+    Real x3v = CellCenterX(k-ks, indcs.nx3, x3min, x3max);
+
+    // Get the full background four-metric.
+    Real g_dd[4][4];
+    Real beta_d[3];
+    Real betasq = 0.;
+    for (int a = 0; a < 3; a++) {
+      beta_d[a] = 0;
+      for (int b = 0; b < 3; b++) {
+        g_dd[1+a][1+b] = adm.g_dd(m,a,b,k,j,i);
+        beta_d[a] += adm.g_dd(m,a,b,k,j,i)*adm.beta_u(m,b,k,j,i);
+      }
+      g_dd[0][1+a] = g_dd[1+a][0] = beta_d[a];
+      betasq += beta_d[a]*adm.beta_u(m,a,k,j,i);
+    }
+    g_dd[0][0] = -adm.alpha(m,k,j,i)*adm.alpha(m,k,j,i) + betasq;
+
+    // Perturb the metric with a Schwarzschild black hole in KS coordinates
+    Real r = Kokkos::sqrt(x1v*x1v + x2v*x2v + x3v*x3v);
+    const Real eps = mass*1e-3;
+    // If we're too close to the singularity, smooth it out.
+    if (r < eps) {
+      r = 0.5*(eps + r*r/eps);
+    }
+    Real l_d[4] = {1.0, x1v/r, x2v/r, x3v/r};
+    Real H = mass/r;
+
+    Real gnew_dd[4][4];
+    for (int a = 0; a < 4; a++) {
+      for (int b = 0; b < 4; b++) {
+        gnew_dd[a][b] = g_dd[a][b] + 2*H*l_d[a]*l_d[b];
+      }
+    }
+
+    Real gamnew_uu[3][3];
+    Real detgnew = adm::SpatialDet(gnew_dd[1][1], gnew_dd[1][2], gnew_dd[1][3],
+                                   gnew_dd[2][2], gnew_dd[2][3], gnew_dd[3][3]);
+    adm::SpatialInv(1.0/detgnew, gnew_dd[1][1], gnew_dd[1][2], gnew_dd[1][3],
+                    gnew_dd[2][2], gnew_dd[2][3], gnew_dd[3][3], &gamnew_uu[0][0],
+                    &gamnew_uu[0][1], &gamnew_uu[0][2], &gamnew_uu[1][1], &gamnew_uu[1][2],
+                    &gamnew_uu[2][2]);
+    gamnew_uu[1][0] = gamnew_uu[0][1];
+    gamnew_uu[2][0] = gamnew_uu[0][2];
+    gamnew_uu[2][1] = gamnew_uu[1][2];
+    Real betanew_u[3] = {0.0};
+    Real betanew_sq = 0.0;
+    for (int a = 0; a < 3; a++) {
+      for (int b = 0; b < 3; b++) {
+        betanew_u[a] += gamnew_uu[a][b]*gnew_dd[0][1+b];
+      }
+      betanew_sq += betanew_u[a]*gnew_dd[0][1+a];
+    }
+    Real alphanew = Kokkos::sqrt(Kokkos::fmax(1e-10, -(gnew_dd[0][0] - betanew_sq)));
+
+    // Compute spatial derivatives for the KS metric.
+    Real dH[3] = {-H*l_d[1]/r, -H*l_d[2]/r, -H*l_d[3]/r};
+    Real dl_dd[3][3] = {{(1.0 - l_d[1]*l_d[1])/r, -l_d[1]*l_d[2]/r, -l_d[1]*l_d[3]/r},
+                        {-l_d[1]*l_d[2]/r, (1.0 - l_d[2]*l_d[2])/r, -l_d[2]*l_d[3]/r},
+                        {-l_d[1]*l_d[3]/r, -l_d[2]*l_d[3]/r, (1.0 - l_d[3]*l_d[3])/r}};
+    Real dh_ddd[3][3][3];
+    for (int a = 0; a < 3; a++) {
+      for (int b = 0; b < 3; b++) {
+        for (int c = 0; c < 3; c++) {
+          dh_ddd[a][b][c] = 2*dH[a]*l_d[1+b]*l_d[1+c] + 2*H*dl_dd[a][b]*l_d[1+c] +
+                            2*H*l_d[1+b]*dl_dd[a][c];
+        }
+      }
+    }
+    Real dbeta_dd[3][3];
+    for (int a = 0; a < 3; a++) {
+      for (int b = 0; b < 3; b++) {
+        dbeta_dd[a][b] = 2*dH[a]*l_d[1+b] + 2*H*dl_dd[a][b];
+      }
+    }
+
+    // This is a super sketchy approximate form for getting the extrinsic curvature that
+    // relies on the metric being nearly flat at the origin. This should be replaced later
+    // with something better.
+    // Perturbed Christoffel symbols
+    Real dG_udd[3][3][3];
+    for (int a = 0; a < 3; a++) {
+      for (int b = 0; b < 3; b++) {
+        for (int c = 0; c < 3; c++) {
+          dG_udd[a][b][c] = 0.0;
+          for (int d = 0; d < 3; d++) {
+            dG_udd[a][b][c] += 0.5*gamnew_uu[a][d]*(dh_ddd[b][d][c] + dh_ddd[c][b][d] -
+                                               dh_ddd[d][b][c]);
+          }
+        }
+      }
+    }
+
+    // Now compute the approximate extrinsic curvature.
+    Real K_dd[3][3];
+    for (int a = 0; a < 3; a++) {
+      for (int b = 0; b < 3; b++) {
+        K_dd[a][b] = 0.0;
+        for (int c = 0; c < 3; c++) {
+          K_dd[a][b] -= 2*dG_udd[c][a][b]*gnew_dd[0][1+c];
+        }
+        K_dd[a][b] += dbeta_dd[a][b] + dbeta_dd[b][a];
+        K_dd[a][b] = K_dd[a][b]/(2.0*alphanew) +
+                     adm.vK_dd(m,a,b,k,j,i)*(adm.alpha(m,k,j,i)/alphanew);
+      }
+    }
+
+    // Now update the metric.
+    adm.g_dd(m,0,0,k,j,i) = gnew_dd[1][1];
+    adm.g_dd(m,0,1,k,j,i) = gnew_dd[1][2];
+    adm.g_dd(m,0,2,k,j,i) = gnew_dd[1][3];
+    adm.g_dd(m,1,1,k,j,i) = gnew_dd[2][2];
+    adm.g_dd(m,1,2,k,j,i) = gnew_dd[2][3];
+    adm.g_dd(m,2,2,k,j,i) = gnew_dd[3][3];
+
+    adm.beta_u(m,0,k,j,i) = betanew_u[0];
+    adm.beta_u(m,1,k,j,i) = betanew_u[1];
+    adm.beta_u(m,2,k,j,i) = betanew_u[2];
+
+    adm.alpha(m,k,j,i) = alphanew;
+
+    adm.vK_dd(m,0,0,k,j,i) = K_dd[0][0];
+    adm.vK_dd(m,0,1,k,j,i) = K_dd[0][1];
+    adm.vK_dd(m,0,2,k,j,i) = K_dd[0][2];
+    adm.vK_dd(m,1,1,k,j,i) = K_dd[1][1];
+    adm.vK_dd(m,1,2,k,j,i) = K_dd[1][2];
+    adm.vK_dd(m,2,2,k,j,i) = K_dd[2][2];
+  });
 }
